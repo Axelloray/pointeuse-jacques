@@ -181,6 +181,7 @@
     <button class="tab" onclick="showPage('conges',this)">🏖 Congés</button>
     <button class="tab" id="tabDashboard" style="display:none" onclick="showPage('dashboard',this)">📊 Dashboard</button>
     <button class="tab" id="tabRecap" style="display:none" onclick="showPage('recap',this)">📅 Récap</button>
+    <button class="tab" id="tabValidConges" style="display:none" onclick="showPage('valid-conges',this)">✅ Valider congés<span id="pendingBadge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:.05rem .4rem;font-size:.65rem;margin-left:.3rem"></span></button>
     <button class="tab" id="tabAdmin" style="display:none" onclick="showPage('admin',this)">⚙️ Admin</button>
     <button class="tab" id="tabLock" onclick="requestAdminAccess()">🔒 Accès gérant</button>
   </div>
@@ -244,11 +245,6 @@
     <button class="btn-add" style="max-width:220px" onclick="addConge()">✅ Enregistrer</button>
   </div>
 
-  <div class="admin-card" id="pendingCongesCard" style="display:none;margin-bottom:1.2rem">
-    <h3>🕐 Demandes en attente de validation</h3>
-    <div id="pendingCongesList"></div>
-  </div>
-
   <div class="admin-card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
       <h3 style="border:none;margin:0;padding:0">📅 Calendrier</h3>
@@ -260,6 +256,15 @@
     </div>
     <div id="congesLegend" style="display:flex;flex-wrap:wrap;gap:.9rem;margin-bottom:1rem"></div>
     <div id="congesCalendar" class="conges-grid"></div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE VALIDATION DES CONGÉS (protégée, gérant uniquement) ══════════ -->
+<div class="page" id="page-valid-conges">
+  <div class="dash-header"><div class="dash-title">✅ Validation des congés</div></div>
+  <div class="admin-card" id="pendingCongesCard">
+    <h3>🕐 Demandes en attente de validation</h3>
+    <div id="pendingCongesList"></div>
   </div>
 </div>
 
@@ -451,7 +456,8 @@ firebase.auth().onAuthStateChanged(user=>{
     renderEmpGrid();
     if(document.getElementById('page-admin').classList.contains('active')) renderAdmin();
     if(document.getElementById('page-dashboard').classList.contains('active')) renderDash();
-    if(document.getElementById('page-conges').classList.contains('active')){ populateCongesForm(); renderCongesCalendar(); renderPendingConges(); }
+    if(document.getElementById('page-conges').classList.contains('active')){ populateCongesForm(); renderCongesCalendar(); }
+    if(document.getElementById('page-valid-conges').classList.contains('active')) renderPendingConges();
   });
   pointagesRef.on('value', snap=>{
     pointages = snap.val() ? Object.values(snap.val()) : [];
@@ -471,7 +477,9 @@ firebase.auth().onAuthStateChanged(user=>{
   });
   congesRef.on('value', snap=>{
     conges = snap.val() ? Object.values(snap.val()) : [];
-    if(document.getElementById('page-conges').classList.contains('active')){ renderCongesCalendar(); renderPendingConges(); }
+    if(document.getElementById('page-conges').classList.contains('active')) renderCongesCalendar();
+    if(document.getElementById('page-valid-conges').classList.contains('active')) renderPendingConges();
+    updatePendingBadge();
   });
 });
 
@@ -525,7 +533,7 @@ setInterval(tick,1000); tick();
 // ══════════════════════════════════════════
 //  NAVIGATION
 // ══════════════════════════════════════════
-const PROTECTED_PAGES=['dashboard','recap','admin'];
+const PROTECTED_PAGES=['dashboard','recap','admin','valid-conges'];
 
 function showPage(id, btn){
   if(PROTECTED_PAGES.includes(id) && !adminUnlocked){
@@ -539,7 +547,8 @@ function showPage(id, btn){
   if(id==='dashboard') renderDash();
   if(id==='recap') renderRecap();
   if(id==='admin') renderAdmin();
-  if(id==='conges'){ populateCongesForm(); renderCongesCalendar(); renderPendingConges(); }
+  if(id==='conges'){ populateCongesForm(); renderCongesCalendar(); }
+  if(id==='valid-conges') renderPendingConges();
 }
 
 // ══════════════════════════════════════════
@@ -553,6 +562,7 @@ function requestAdminAccess(){
     adminUnlocked=true;
     document.getElementById('tabDashboard').style.display='inline-block';
     document.getElementById('tabRecap').style.display='inline-block';
+    document.getElementById('tabValidConges').style.display='inline-block';
     document.getElementById('tabAdmin').style.display='inline-block';
     document.getElementById('tabLock').textContent='🔓 Gérant connecté';
     toast('🔓 Accès gérant débloqué','t-success');
@@ -875,7 +885,7 @@ function addConge(){
   if(status==='attente') toast(`✅ Demande envoyée pour ${emp.name} — en attente de validation par le gérant`,'t-success');
   else toast(`✅ ${type} enregistré et validé pour ${emp.name}`,'t-success');
   renderCongesCalendar();
-  renderPendingConges();
+  updatePendingBadge();
 }
 
 function validateConge(id, approuve){
@@ -888,16 +898,26 @@ function validateConge(id, approuve){
   toast(approuve?`✅ Congé validé pour ${emp?emp.name:''}`:`❌ Congé refusé pour ${emp?emp.name:''}`, approuve?'t-success':'t-info');
   renderPendingConges();
   renderCongesCalendar();
+  updatePendingBadge();
+}
+
+function updatePendingBadge(){
+  const count=conges.filter(c=>c.status==='attente').length;
+  const badge=document.getElementById('pendingBadge');
+  if(!badge) return;
+  if(count>0){ badge.textContent=count; badge.style.display='inline-block'; }
+  else { badge.style.display='none'; }
 }
 
 function renderPendingConges(){
-  const card=document.getElementById('pendingCongesCard');
+  if(!adminUnlocked) return; // sécurité : cette page ne devrait jamais être accessible sans le code gérant
   const list=document.getElementById('pendingCongesList');
-  if(!adminUnlocked){ card.style.display='none'; return; }
-
   const pending=conges.filter(c=>c.status==='attente');
-  if(!pending.length){ card.style.display='none'; return; }
-  card.style.display='block';
+
+  if(!pending.length){
+    list.innerHTML='<p style="color:var(--gray);font-size:.85rem">Aucune demande en attente pour le moment. ✅</p>';
+    return;
+  }
 
   list.innerHTML=pending.map(c=>{
     const emp=employees.find(e=>e.id===c.empId);
@@ -922,6 +942,7 @@ function deleteConge(id){
   saveConges();
   renderCongesCalendar();
   renderPendingConges();
+  updatePendingBadge();
   toast('🗑 Congé supprimé','t-info');
 }
 
