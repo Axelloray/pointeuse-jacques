@@ -250,6 +250,10 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>
+emailjs.init({ publicKey: "Hx45flDjyjWz_haqo" });
+</script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
@@ -665,7 +669,7 @@ function exportCSV(){
 }
 
 // ══════════════════════════════════════════
-//  EMAIL (ouverture client mail)
+//  EMAIL (envoi direct en 1 clic via EmailJS)
 // ══════════════════════════════════════════
 function sendEmail(){
   const val=document.getElementById('recapMonth').value;
@@ -685,11 +689,21 @@ function sendEmail(){
     body+='\n';
   });
 
-  const subject=encodeURIComponent(`Récapitulatif heures — ${moisLabel} — Boulangerie des Forges`);
-  const bodyEnc=encodeURIComponent(body);
+  const subject=`Récapitulatif heures — ${moisLabel} — Boulangerie des Forges`;
   const email=settings.email||'gerant@boulangerie-desforges.fr';
-  window.location.href=`mailto:${email}?subject=${subject}&body=${bodyEnc}`;
-  toast(`📧 Email préparé pour ${email}`,'t-info');
+
+  toast('📧 Envoi en cours...','t-info');
+
+  emailjs.send('service_i0lfwfg','template_s58kq34',{
+    to_email: email,
+    subject: subject,
+    message: body
+  }).then(()=>{
+    toast(`✅ Email envoyé à ${email}`,'t-success');
+  }).catch(err=>{
+    console.error('Erreur EmailJS :', err);
+    toast('❌ Échec de l\'envoi — vérifie la console','t-error');
+  });
 }
 
 // ══════════════════════════════════════════
