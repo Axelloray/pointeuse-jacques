@@ -39,6 +39,7 @@
     .emp-status{font-size:.65rem;margin-top:.3rem;font-weight:600;padding:.15rem .45rem;border-radius:10px;display:inline-block}
     .status-in{background:#D1FAE5;color:#065F46}
     .status-out{background:#FEE2E2;color:#991B1B}
+    .status-pause{background:#FEF3C7;color:#92400E}
 
     .pin-panel{background:#fff;border-radius:14px;padding:1.6rem;border:1.5px solid var(--light);max-width:310px;margin:0 auto;box-shadow:0 4px 20px rgba(0,0,0,.08)}
     .pin-title{text-align:center;font-weight:700;font-size:1rem;color:var(--navy);margin-bottom:.25rem}
@@ -268,7 +269,7 @@
   <div id="activeSessions"></div>
   <div class="stats-row" id="statsRow"></div>
   <div class="table-wrap">
-    <table><thead><tr><th>Salarié</th><th>Date</th><th>Arrivée</th><th>Départ</th><th>Durée</th><th>Statut</th><th>Actions</th></tr></thead>
+    <table><thead><tr><th>Salarié</th><th>Date</th><th>Arrivée</th><th>Pause</th><th>Départ</th><th>Durée nette</th><th>Statut</th><th>Actions</th></tr></thead>
     <tbody id="dashTbody"></tbody></table>
   </div>
 </div>
@@ -280,6 +281,10 @@
     <div class="form-row"><label>Salarié</label><select id="mEmp"></select></div>
     <div class="form-row"><label>Date</label><input type="date" id="mDate"/></div>
     <div class="form-row"><label>Heure d'arrivée</label><input type="time" id="mArrivee"/></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+      <div class="form-row"><label>Début pause</label><input type="time" id="mPauseDebut"/></div>
+      <div class="form-row"><label>Fin pause</label><input type="time" id="mPauseFin"/></div>
+    </div>
     <div class="form-row"><label>Heure de départ <span style="text-transform:none;font-weight:400">(laisser vide si toujours en poste)</span></label><input type="time" id="mDepart"/></div>
     <button class="btn-add" onclick="saveModal()">💾 Enregistrer</button>
     <button class="btn-cancel" onclick="closeModal()">Annuler</button>
@@ -345,6 +350,7 @@
         <div class="form-row"><label>Heures légales / semaine</label><input type="number" id="sHours" value="35" min="1" max="60"/></div>
         <div class="form-row"><label>Code d'accès gérant (4 chiffres)</label><input type="password" id="sAdminPin" maxlength="4" placeholder="••••"/></div>
         <div class="form-row"><label>Seuil alerte heures sup. (h/jour)</label><input type="number" id="sSeuilSup" min="1" max="24" step="0.5" value="10"/></div>
+        <div class="form-row"><label>Pause minimum déduite (min)</label><input type="number" id="sPauseMin" min="0" max="120" step="5" value="30"/></div>
       </div>
       <button class="btn-add" style="max-width:180px" onclick="saveSettings()">💾 Enregistrer</button>
     </div>
@@ -396,7 +402,7 @@ const defaultEmployees = [
 let employees = [];
 let pointages = [];
 let sessions  = {};   // {empId: {arrivee, date}}
-let settings  = {email:'gerant@boulangerie-desforges.fr', heures:35, adminPin:'0000', seuilHeureSup:10};
+let settings  = {email:'gerant@boulangerie-desforges.fr', heures:35, adminPin:'0000', seuilHeureSup:10, pauseMin:30};
 let conges    = [];   // {id, empId, type, start, end}
 let congesMonthDate = new Date();
 
@@ -547,11 +553,18 @@ function requestAdminAccess(){
 // ══════════════════════════════════════════
 //  GRILLE EMPLOYÉS
 // ══════════════════════════════════════════
+function empStatusInfo(emp){
+  const sess=sessions[emp.id];
+  if(!sess) return {cls:'status-out', label:'● Absent'};
+  if(sess.state==='pause') return {cls:'status-pause', label:'☕ En pause'};
+  return {cls:'status-in', label:'✓ Présent'};
+}
+
 function renderEmpGrid(){
   const g=document.getElementById('empGrid');
   g.innerHTML='';
   employees.forEach(emp=>{
-    const isIn=!!sessions[emp.id];
+    const info=empStatusInfo(emp);
     const initials=emp.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
     const div=document.createElement('div');
     div.className='emp-btn'+(selEmp?.id===emp.id?' selected':'');
@@ -559,7 +572,7 @@ function renderEmpGrid(){
       <div class="emp-avatar" style="background:${emp.color}">${initials}</div>
       <div class="emp-name">${emp.name}</div>
       <div class="emp-site">${emp.site}</div>
-      <span class="emp-status ${isIn?'status-in':'status-out'}">${isIn?'✓ Présent':'● Absent'}</span>`;
+      <span class="emp-status ${info.cls}">${info.label}</span>`;
     div.onclick=()=>selectEmp(emp);
     g.appendChild(div);
   });
@@ -567,20 +580,26 @@ function renderEmpGrid(){
 renderEmpGrid();
 
 // ══════════════════════════════════════════
-//  SÉLECTION & PIN
+//  SÉLECTION & PIN (4 étapes : arrivée → pause → fin de pause → départ)
 // ══════════════════════════════════════════
+function pinStepInfo(emp){
+  const sess=sessions[emp.id];
+  if(!sess) return {label:'ENREGISTRER MON ARRIVÉE', sub:'➡️ Enregistrez votre ARRIVÉE', bg:'var(--gold)', fg:'var(--navy)'};
+  if(sess.state==='in')    return {label:'DÉBUT DE PAUSE', sub:'☕ Enregistrez le début de votre pause', bg:'#C0710A', fg:'#fff'};
+  if(sess.state==='pause') return {label:'FIN DE PAUSE', sub:'🔄 Enregistrez la fin de votre pause', bg:'var(--green)', fg:'#fff'};
+  return {label:'ENREGISTRER MON DÉPART', sub:'⬅️ Enregistrez votre DÉPART (fin de journée)', bg:'var(--red)', fg:'#fff'};
+}
+
 function selectEmp(emp){
   selEmp=emp; pinBuf='';
-  const isIn=!!sessions[emp.id];
+  const info=pinStepInfo(emp);
   document.getElementById('pinTitle').textContent=emp.name;
-  document.getElementById('pinSub').textContent=isIn
-    ? '⬅️ Enregistrez votre DÉPART'
-    : '➡️ Enregistrez votre ARRIVÉE';
+  document.getElementById('pinSub').textContent=info.sub;
   document.getElementById('pinDisplay').textContent='_ _ _ _';
   const btn=document.getElementById('btnConfirm');
-  btn.textContent=isIn?'ENREGISTRER MON DÉPART':'ENREGISTRER MON ARRIVÉE';
-  btn.style.background=isIn?'var(--red)':'var(--gold)';
-  btn.style.color=isIn?'#fff':'var(--navy)';
+  btn.textContent=info.label;
+  btn.style.background=info.bg;
+  btn.style.color=info.fg;
   btn.disabled=true;
   document.getElementById('empSelect').style.display='none';
   document.getElementById('pinPanel').style.display='block';
@@ -610,6 +629,36 @@ function pclr(){
   document.getElementById('btnConfirm').disabled=true;
 }
 
+// Minutes entre deux heures HH:MM (gère le passage de minuit)
+function minutesEntre(t1,t2){
+  const [h1,m1]=t1.split(':').map(Number);
+  const [h2,m2]=t2.split(':').map(Number);
+  let diff=(h2*60+m2)-(h1*60+m1);
+  if(diff<0) diff+=24*60;
+  return diff;
+}
+
+// Construit une entrée de pointage complète et calcule la durée nette.
+// La pause est toujours déduite au minimum settings.pauseMin (30 min par défaut),
+// même si la pause réelle pointée est plus courte. Si elle est plus longue, c'est la durée réelle qui est déduite.
+function buildPointageEntry(empId, date, arrivee, pauseDebut, pauseFin, depart){
+  const seuilPause=(settings.pauseMin!=null)?settings.pauseMin:30;
+  const brutMin=minutesEntre(arrivee, depart);
+  let pauseMin=0;
+  if(pauseDebut && pauseFin) pauseMin=minutesEntre(pauseDebut, pauseFin);
+  const pauseDeduite=Math.max(seuilPause, pauseMin);
+  const netMin=Math.max(0, brutMin-pauseDeduite);
+  return {
+    id:Date.now(),
+    empId, date, arrivee,
+    pauseDebut: pauseDebut||null,
+    pauseFin: pauseFin||null,
+    depart,
+    duree:+(netMin/60).toFixed(2),
+    dureePause:+(pauseDeduite/60).toFixed(2)
+  };
+}
+
 function confirmPin(){
   if(!selEmp) return;
   if(pinBuf!==selEmp.pin){ toast('❌ Code PIN incorrect','t-error'); pclr(); return; }
@@ -617,24 +666,27 @@ function confirmPin(){
   const pad=n=>String(n).padStart(2,'0');
   const time=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const date=now.toISOString().split('T')[0];
-  const isIn=!!sessions[selEmp.id];
+  const sess=sessions[selEmp.id];
 
-  if(!isIn){
-    sessions[selEmp.id]={arrivee:time,date};
+  if(!sess){
+    sessions[selEmp.id]={date, arrivee:time, pauseDebut:null, pauseFin:null, state:'in'};
     saveSessions();
     toast(`✅ Arrivée ${selEmp.name} — ${time}`,'t-success');
+  } else if(sess.state==='in'){
+    sess.pauseDebut=time; sess.state='pause';
+    saveSessions();
+    toast(`☕ Début de pause ${selEmp.name} — ${time}`,'t-info');
+  } else if(sess.state==='pause'){
+    sess.pauseFin=time; sess.state='in2';
+    saveSessions();
+    toast(`🔄 Fin de pause ${selEmp.name} — ${time}`,'t-info');
   } else {
-    const sess=sessions[selEmp.id];
-    const [ah,am]=sess.arrivee.split(':').map(Number);
-    const [dh,dm]=time.split(':').map(Number);
-    let dur=((dh*60+dm)-(ah*60+am))/60;
-    if(dur<0) dur+=24;
-    const entry={id:Date.now(),empId:selEmp.id,date:sess.date,arrivee:sess.arrivee,depart:time,duree:+dur.toFixed(2)};
+    const entry=buildPointageEntry(selEmp.id, sess.date, sess.arrivee, sess.pauseDebut, sess.pauseFin, time);
     pointages.push(entry);
     delete sessions[selEmp.id];
     savePointages();
     saveSessions();
-    toast(`✅ Départ ${selEmp.name} — ${time} (${dur.toFixed(1)}h)`,'t-success');
+    toast(`✅ Départ ${selEmp.name} — ${time} (${entry.duree.toFixed(1)}h travaillées)`,'t-success');
     checkOvertimeAndAlert(entry);
   }
   cancelPin();
@@ -669,6 +721,8 @@ function openEditModal(pointageId){
   populateModalEmpSelect(p.empId);
   document.getElementById('mDate').value=p.date;
   document.getElementById('mArrivee').value=p.arrivee;
+  document.getElementById('mPauseDebut').value=p.pauseDebut||'';
+  document.getElementById('mPauseFin').value=p.pauseFin||'';
   document.getElementById('mDepart').value=p.depart||'';
   document.getElementById('mDeleteBtn').style.display='block';
   document.getElementById('modalOverlay').style.display='flex';
@@ -680,6 +734,8 @@ function openAddModal(){
   populateModalEmpSelect();
   document.getElementById('mDate').value=new Date().toISOString().split('T')[0];
   document.getElementById('mArrivee').value='';
+  document.getElementById('mPauseDebut').value='';
+  document.getElementById('mPauseFin').value='';
   document.getElementById('mDepart').value='';
   document.getElementById('mDeleteBtn').style.display='none';
   document.getElementById('modalOverlay').style.display='flex';
@@ -694,6 +750,8 @@ function openSessionEditModal(empId){
   document.getElementById('mEmp').disabled=true;
   document.getElementById('mDate').value=sess.date;
   document.getElementById('mArrivee').value=sess.arrivee;
+  document.getElementById('mPauseDebut').value=sess.pauseDebut||'';
+  document.getElementById('mPauseFin').value=sess.pauseFin||'';
   document.getElementById('mDepart').value='';
   document.getElementById('mDeleteBtn').style.display='block';
   document.getElementById('modalOverlay').style.display='flex';
@@ -709,34 +767,42 @@ function saveModal(){
   const empId=+document.getElementById('mEmp').value;
   const date=document.getElementById('mDate').value;
   const arrivee=document.getElementById('mArrivee').value;
+  const pauseDebut=document.getElementById('mPauseDebut').value;
+  const pauseFin=document.getElementById('mPauseFin').value;
   const depart=document.getElementById('mDepart').value;
 
   if(!date||!arrivee){ toast("❌ Date et heure d'arrivée requises",'t-error'); return; }
+  if((pauseDebut && !pauseFin) || (!pauseDebut && pauseFin)){ toast('❌ Renseigne le début ET la fin de pause (ou aucun des deux)','t-error'); return; }
 
   if(modalMode==='edit-session'){
     if(depart){
-      const dur=calcDuree(arrivee,depart);
-      const entry={id:Date.now(),empId,date,arrivee,depart,duree:dur};
+      const entry=buildPointageEntry(empId,date,arrivee,pauseDebut,pauseFin,depart);
       pointages.push(entry);
       delete sessions[empId];
       savePointages(); saveSessions();
       toast('✅ Présence clôturée','t-success');
       checkOvertimeAndAlert(entry);
     } else {
-      sessions[empId]={arrivee,date};
+      const state=(pauseDebut && pauseFin)?'in2':(pauseDebut?'pause':'in');
+      sessions[empId]={date,arrivee,pauseDebut:pauseDebut||null,pauseFin:pauseFin||null,state};
       saveSessions();
-      toast("✅ Heure d'arrivée mise à jour",'t-success');
+      toast('✅ Présence mise à jour','t-success');
     }
   } else if(modalMode==='edit-pointage'){
     if(!depart){ toast('❌ Heure de départ requise','t-error'); return; }
     const p=pointages.find(x=>x.id===modalTarget);
-    if(p){ p.empId=empId; p.date=date; p.arrivee=arrivee; p.depart=depart; p.duree=calcDuree(arrivee,depart); }
+    if(p){
+      const rebuilt=buildPointageEntry(empId,date,arrivee,pauseDebut,pauseFin,depart);
+      p.empId=empId; p.date=date; p.arrivee=arrivee;
+      p.pauseDebut=rebuilt.pauseDebut; p.pauseFin=rebuilt.pauseFin;
+      p.depart=depart; p.duree=rebuilt.duree; p.dureePause=rebuilt.dureePause;
+    }
     savePointages();
     toast('✅ Pointage modifié','t-success');
     if(p) checkOvertimeAndAlert(p);
   } else if(modalMode==='add-pointage'){
     if(!depart){ toast('❌ Heure de départ requise','t-error'); return; }
-    const entry={id:Date.now(),empId,date,arrivee,depart,duree:calcDuree(arrivee,depart)};
+    const entry=buildPointageEntry(empId,date,arrivee,pauseDebut,pauseFin,depart);
     pointages.push(entry);
     savePointages();
     toast('✅ Pointage ajouté','t-success');
@@ -932,8 +998,11 @@ function renderDash(){
         const emp=employees.find(e=>String(e.id)===String(id));
         if(!emp) return '';
         const sess=sessions[id];
+        let statutTxt=`arrivé(e) à ${sess.arrivee}`;
+        if(sess.state==='pause') statutTxt+=` — en pause depuis ${sess.pauseDebut}`;
+        else if(sess.state==='in2') statutTxt+=` — pause ${sess.pauseDebut}–${sess.pauseFin}, de retour`;
         return `<div class="sess-card">
-          <div class="sess-info"><b>${emp.name}</b> — arrivé(e) à ${sess.arrivee} le ${new Date(sess.date+'T12:00:00').toLocaleDateString('fr-FR')}</div>
+          <div class="sess-info"><b>${emp.name}</b> — ${statutTxt} (${new Date(sess.date+'T12:00:00').toLocaleDateString('fr-FR')})</div>
           <button class="btn-edit" onclick="openSessionEditModal('${id}')">✏️ Corriger / clôturer</button>
         </div>`;
       }).join('');
@@ -948,14 +1017,18 @@ function renderDash(){
     const dd=new Date(p.date+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
     const cls=p.duree>10?'b-red':p.duree>=7?'b-green':'b-gold';
     const lbl=p.duree>10?'Heure sup.':p.duree>=7?'Normal':'Court';
+    const pauseTxt=(p.pauseDebut&&p.pauseFin)?`${p.pauseDebut}–${p.pauseFin}`:`—`;
+    const pauseSub=p.dureePause?`<br><span style="font-size:.65rem;color:var(--gray)">(${Math.round(p.dureePause*60)} min déduites)</span>`:'';
     tbody.innerHTML+=`<tr>
       <td><strong>${emp.name}</strong><br><span style="font-size:.7rem;color:var(--gray)">${emp.site}</span></td>
-      <td>${dd}</td><td>${p.arrivee}</td><td>${p.depart||'—'}</td>
+      <td>${dd}</td><td>${p.arrivee}</td>
+      <td>${pauseTxt}${pauseSub}</td>
+      <td>${p.depart||'—'}</td>
       <td><strong>${p.duree.toFixed(1)}h</strong></td>
       <td><span class="badge ${cls}">${lbl}</span></td>
       <td><button class="btn-edit" onclick="openEditModal(${p.id})">✏️ Modifier</button></td></tr>`;
   });
-  if(!data.length) tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray)">Aucun pointage sur cette période</td></tr>';
+  if(!data.length) tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--gray)">Aucun pointage sur cette période</td></tr>';
 }
 
 // ══════════════════════════════════════════
@@ -1051,11 +1124,11 @@ function renderRecap(){
 //  EXPORT CSV
 // ══════════════════════════════════════════
 function exportCSV(){
-  let csv='\uFEFFSalarié;Site;Date;Arrivée;Départ;Durée (h)\n';
+  let csv='\uFEFFSalarié;Site;Date;Arrivée;Début pause;Fin pause;Départ;Pause déduite (h);Durée nette (h)\n';
   [...pointages].sort((a,b)=>a.date.localeCompare(b.date)).forEach(p=>{
     const emp=employees.find(e=>e.id===p.empId);
     if(!emp) return;
-    csv+=`${emp.name};${emp.site};${p.date};${p.arrivee};${p.depart||''};${p.duree.toFixed(2)}\n`;
+    csv+=`${emp.name};${emp.site};${p.date};${p.arrivee};${p.pauseDebut||''};${p.pauseFin||''};${p.depart||''};${(p.dureePause||0).toFixed(2)};${p.duree.toFixed(2)}\n`;
   });
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
   const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`pointages_${new Date().toISOString().split('T')[0]}.csv`});
@@ -1171,6 +1244,7 @@ function renderAdmin(){
   document.getElementById('sHours').value=settings.heures||35;
   document.getElementById('sAdminPin').value=settings.adminPin||'0000';
   document.getElementById('sSeuilSup').value=settings.seuilHeureSup||10;
+  document.getElementById('sPauseMin').value=(settings.pauseMin!=null)?settings.pauseMin:30;
 }
 
 function addEmp(){
@@ -1240,6 +1314,8 @@ function saveSettings(){
   settings.email=document.getElementById('sEmail').value.trim();
   settings.heures=+document.getElementById('sHours').value||35;
   settings.seuilHeureSup=+document.getElementById('sSeuilSup').value||10;
+  settings.pauseMin=+document.getElementById('sPauseMin').value;
+  if(isNaN(settings.pauseMin)) settings.pauseMin=30;
   const newPin=document.getElementById('sAdminPin').value.trim();
   if(/^\d{4}$/.test(newPin)) settings.adminPin=newPin;
   else { toast('❌ Code gérant : 4 chiffres exactement','t-error'); return; }
