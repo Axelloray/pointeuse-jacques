@@ -250,29 +250,82 @@
   </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script>
 // ══════════════════════════════════════════
-//  DONNÉES & ÉTAT
+//  CONNEXION FIREBASE (base de données partagée)
+// ══════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyBAiHL7lkh9bRbpUbME8y1i75FoWeWAROM",
+  authDomain: "pointeuse-jacques.firebaseapp.com",
+  databaseURL: "https://pointeuse-jacques-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "pointeuse-jacques",
+  storageBucket: "pointeuse-jacques.firebasestorage.app",
+  messagingSenderId: "941882315298",
+  appId: "1:941882315298:web:3388b11337146021d3f07b"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+</script>
+<script>
+// ══════════════════════════════════════════
+//  DONNÉES & ÉTAT (synchronisées en temps réel via Firebase)
 // ══════════════════════════════════════════
 const COLORS=['#002395','#1A7A4A','#C0710A','#6B21A8','#0369A1','#B91C1C','#0D5E5E','#7C4010'];
 
-// Charge depuis localStorage ou données par défaut
-function load(key,def){try{const v=localStorage.getItem(key);return v?JSON.parse(v):def;}catch{return def;}}
-function save(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch{}}
-
-let employees = load('jq_employees',[
+const defaultEmployees = [
   {id:1,name:'Sophie Martin',pin:'1234',site:'Site 1',color:COLORS[0]},
   {id:2,name:'Lucas Bernard',pin:'2345',site:'Site 1',color:COLORS[1]},
   {id:3,name:'Emma Leroy',pin:'3456',site:'Site 2',color:COLORS[2]},
   {id:4,name:'Thomas Dubois',pin:'4567',site:'Site 2',color:COLORS[3]},
   {id:5,name:'Chloé Moreau',pin:'5678',site:'Site 1',color:COLORS[4]},
-]);
+];
 
-let pointages  = load('jq_pointages', genDemo());
-let sessions   = load('jq_sessions', {});   // {empId: {arrivee, date}}
-let settings   = load('jq_settings', {email:'gerant@boulangerie-desforges.fr', heures:35});
+let employees = [];
+let pointages = [];
+let sessions  = {};   // {empId: {arrivee, date}}
+let settings  = {email:'gerant@boulangerie-desforges.fr', heures:35};
 
 let selEmp=null, pinBuf='';
+
+// Références vers la base de données
+const employeesRef = db.ref('employees');
+const pointagesRef = db.ref('pointages');
+const sessionsRef  = db.ref('sessions');
+const settingsRef  = db.ref('settings');
+
+function saveEmployees(){ employeesRef.set(employees); }
+function savePointages(){ pointagesRef.set(pointages); }
+function saveSessions(){ sessionsRef.set(sessions); }
+function saveSettingsData(){ settingsRef.set(settings); }
+
+// Si la base est vide (premier lancement), on la remplit avec des données de démo
+employeesRef.once('value').then(snap=>{ if(!snap.exists()) employeesRef.set(defaultEmployees); });
+pointagesRef.once('value').then(snap=>{ if(!snap.exists()) pointagesRef.set(genDemo()); });
+settingsRef.once('value').then(snap=>{ if(!snap.exists()) settingsRef.set(settings); });
+
+// Écoute en temps réel : dès qu'un appareil modifie une donnée, tous les autres se mettent à jour automatiquement
+employeesRef.on('value', snap=>{
+  employees = snap.val() ? Object.values(snap.val()) : [];
+  renderEmpGrid();
+  if(document.getElementById('page-admin').classList.contains('active')) renderAdmin();
+  if(document.getElementById('page-dashboard').classList.contains('active')) renderDash();
+});
+pointagesRef.on('value', snap=>{
+  pointages = snap.val() ? Object.values(snap.val()) : [];
+  if(document.getElementById('page-dashboard').classList.contains('active')) renderDash();
+  if(document.getElementById('page-recap').classList.contains('active')) renderRecap();
+});
+sessionsRef.on('value', snap=>{
+  sessions = snap.val() || {};
+  renderEmpGrid();
+  if(document.getElementById('page-dashboard').classList.contains('active')) renderDash();
+});
+settingsRef.on('value', snap=>{
+  if(snap.val()) settings = snap.val();
+  if(document.getElementById('page-admin').classList.contains('active')) renderAdmin();
+});
 
 // ──────────────────────────────────────────
 //  DÉMO : génère des pointages du mois
@@ -411,7 +464,7 @@ function confirmPin(){
 
   if(!isIn){
     sessions[selEmp.id]={arrivee:time,date};
-    save('jq_sessions',sessions);
+    saveSessions();
     toast(`✅ Arrivée ${selEmp.name} — ${time}`,'t-success');
   } else {
     const sess=sessions[selEmp.id];
@@ -422,8 +475,8 @@ function confirmPin(){
     const entry={id:Date.now(),empId:selEmp.id,date:sess.date,arrivee:sess.arrivee,depart:time,duree:+dur.toFixed(2)};
     pointages.push(entry);
     delete sessions[selEmp.id];
-    save('jq_pointages',pointages);
-    save('jq_sessions',sessions);
+    savePointages();
+    saveSessions();
     toast(`✅ Départ ${selEmp.name} — ${time} (${dur.toFixed(1)}h)`,'t-success');
   }
   cancelPin();
@@ -661,7 +714,7 @@ function addEmp(){
   if(employees.some(e=>e.pin===pin)){toast('❌ Ce PIN est déjà utilisé','t-error');return;}
   const emp={id:Date.now(),name,pin,site,color:COLORS[employees.length%COLORS.length]};
   employees.push(emp);
-  save('jq_employees',employees);
+  saveEmployees();
   document.getElementById('nName').value='';
   document.getElementById('nPin').value='';
   renderAdmin(); renderEmpGrid();
@@ -672,8 +725,8 @@ function delEmp(id){
   if(!confirm('Supprimer ce salarié ?')) return;
   employees=employees.filter(e=>e.id!==id);
   delete sessions[id];
-  save('jq_employees',employees);
-  save('jq_sessions',sessions);
+  saveEmployees();
+  saveSessions();
   renderAdmin(); renderEmpGrid();
   toast('Salarié supprimé','t-info');
 }
@@ -681,7 +734,7 @@ function delEmp(id){
 function saveSettings(){
   settings.email=document.getElementById('sEmail').value.trim();
   settings.heures=+document.getElementById('sHours').value||35;
-  save('jq_settings',settings);
+  saveSettingsData();
   toast('✅ Paramètres enregistrés','t-success');
 }
 </script>
