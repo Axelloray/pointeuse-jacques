@@ -316,7 +316,7 @@
     <div class="form-row"><label>Prénom Nom</label><input type="text" id="eName"/></div>
     <div class="form-row"><label>Code PIN (4 chiffres)</label><input type="password" id="ePin" maxlength="4"/></div>
     <div class="form-row"><label>Site</label>
-      <select id="eSite"><option value="Site 1">Site 1</option><option value="Site 2">Site 2</option></select>
+      <select id="eSite"><option value="Saint Ouen des Toits">Saint Ouen des Toits</option><option value="Chailland">Chailland</option></select>
     </div>
     <div class="form-row"><label>Jours de repos habituels</label>
       <div class="days-check" id="eRepos"></div>
@@ -353,7 +353,7 @@
       <div class="form-row"><label>Prénom Nom</label><input type="text" id="nName" placeholder="Ex: Marie Dupont"/></div>
       <div class="form-row"><label>Code PIN (4 chiffres)</label><input type="password" id="nPin" maxlength="4" placeholder="••••"/></div>
       <div class="form-row"><label>Site</label>
-        <select id="nSite"><option value="Site 1">Site 1</option><option value="Site 2">Site 2</option></select>
+        <select id="nSite"><option value="Saint Ouen des Toits">Saint Ouen des Toits</option><option value="Chailland">Chailland</option></select>
       </div>
       <div class="form-row"><label>Jours de repos habituels <span style="text-transform:none;font-weight:400">(non travaillés)</span></label>
         <div class="days-check" id="nRepos"></div>
@@ -409,11 +409,11 @@ firebase.auth().signInAnonymously().catch(err=>{
 const COLORS=['#002395','#1A7A4A','#C0710A','#6B21A8','#0369A1','#B91C1C','#0D5E5E','#7C4010'];
 
 const defaultEmployees = [
-  {id:1,name:'Sophie Martin',pin:'1234',site:'Site 1',color:COLORS[0]},
-  {id:2,name:'Lucas Bernard',pin:'2345',site:'Site 1',color:COLORS[1]},
-  {id:3,name:'Emma Leroy',pin:'3456',site:'Site 2',color:COLORS[2]},
-  {id:4,name:'Thomas Dubois',pin:'4567',site:'Site 2',color:COLORS[3]},
-  {id:5,name:'Chloé Moreau',pin:'5678',site:'Site 1',color:COLORS[4]},
+  {id:1,name:'Sophie Martin',pin:'1234',site:'Saint Ouen des Toits',color:COLORS[0]},
+  {id:2,name:'Lucas Bernard',pin:'2345',site:'Saint Ouen des Toits',color:COLORS[1]},
+  {id:3,name:'Emma Leroy',pin:'3456',site:'Chailland',color:COLORS[2]},
+  {id:4,name:'Thomas Dubois',pin:'4567',site:'Chailland',color:COLORS[3]},
+  {id:5,name:'Chloé Moreau',pin:'5678',site:'Saint Ouen des Toits',color:COLORS[4]},
 ];
 
 let employees = [];
