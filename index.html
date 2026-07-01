@@ -153,6 +153,8 @@
     .sess-info b{color:var(--navy)}
     .btn-edit{background:var(--off);border:1.5px solid var(--light);border-radius:6px;padding:.3rem .6rem;font-size:.72rem;font-weight:700;cursor:pointer;color:var(--navy)}
     .btn-edit:hover{background:var(--gold);border-color:var(--gold)}
+    .site-filter-btn{background:var(--off);border:1.5px solid var(--light);border-radius:20px;padding:.4rem .9rem;font-size:.76rem;font-weight:700;cursor:pointer;color:var(--gray);transition:all .15s}
+    .site-filter-btn.active{background:var(--navy);border-color:var(--navy);color:#fff}
 
     /* ── TOAST ── */
     .toast{position:fixed;top:1rem;right:1rem;padding:.75rem 1.2rem;border-radius:8px;font-weight:700;font-size:.86rem;z-index:9999;transform:translateY(-100px);transition:transform .3s;box-shadow:0 4px 18px rgba(0,0,0,.18);max-width:320px}
@@ -254,6 +256,7 @@
         <button class="btn-sm btn-navy" onclick="changeCongesMonth(1)">▶</button>
       </div>
     </div>
+    <div id="congesSiteFilter" style="display:flex;gap:.4rem;margin-bottom:1rem;flex-wrap:wrap"></div>
     <div id="congesLegend" style="display:flex;flex-wrap:wrap;gap:.9rem;margin-bottom:1rem"></div>
     <div id="congesCalendar" class="conges-grid"></div>
   </div>
@@ -422,6 +425,7 @@ let sessions  = {};   // {empId: {arrivee, date}}
 let settings  = {email:'gerant@boulangerie-desforges.fr', heures:35, adminPin:'0000', seuilHeureSup:10, pauseMin:30};
 let conges    = [];   // {id, empId, type, start, end}
 let congesMonthDate = new Date();
+let congesSiteFilter = 'all'; // 'all' | 'Saint Ouen des Toits' | 'Chailland'
 
 let adminUnlocked = false;
 
@@ -951,16 +955,33 @@ function changeCongesMonth(delta){
   renderCongesCalendar();
 }
 
+function setCongesSiteFilter(site){
+  congesSiteFilter=site;
+  renderCongesCalendar();
+}
+
 function renderCongesCalendar(){
   const label=document.getElementById('congesMonthLabel');
   const lbl=congesMonthDate.toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
   label.textContent=lbl.charAt(0).toUpperCase()+lbl.slice(1);
 
-  // Légende des couleurs par salarié
+  // Liste des sites disponibles (déduite des salariés existants) + boutons de filtre
+  const sites=[...new Set(employees.map(e=>e.site).filter(Boolean))];
+  const filterBox=document.getElementById('congesSiteFilter');
+  const filters=[{v:'all',l:'🏢 Tous les sites'}, ...sites.map(s=>({v:s,l:s}))];
+  filterBox.innerHTML=filters.map(f=>
+    `<button class="site-filter-btn ${congesSiteFilter===f.v?'active':''}" onclick="setCongesSiteFilter('${f.v.replace(/'/g,"\\'")}')">${f.l}</button>`
+  ).join('');
+
+  // Salariés visibles selon le filtre sélectionné
+  const visibleEmployees=congesSiteFilter==='all'?employees:employees.filter(e=>e.site===congesSiteFilter);
+  const visibleIds=new Set(visibleEmployees.map(e=>e.id));
+
+  // Légende des couleurs par salarié (uniquement ceux du site filtré)
   const legend=document.getElementById('congesLegend');
-  legend.innerHTML=(employees.map(e=>
+  legend.innerHTML=(visibleEmployees.map(e=>
     `<div class="legend-item"><span class="legend-dot" style="background:${e.color}"></span>${e.name}</div>`
-  ).join('') || '<span style="font-size:.78rem;color:var(--gray)">Aucun salarié enregistré</span>')
+  ).join('') || '<span style="font-size:.78rem;color:var(--gray)">Aucun salarié sur ce site</span>')
     +'<div style="font-size:.7rem;color:var(--gray);width:100%;margin-top:.3rem">🟢 Couleur pleine = congé validé &nbsp;·&nbsp; 🕐 Pointillés = en attente de validation &nbsp;·&nbsp; 🔳 Couleur atténuée = jour de repos habituel</div>';
 
   const y=congesMonthDate.getFullYear(), m=congesMonthDate.getMonth();
@@ -984,8 +1005,8 @@ function renderCongesCalendar(){
       isToday=dateStr===todayStr;
       const weekday=new Date(dateStr+'T12:00:00').getDay();
 
-      // Congés posés manuellement (les refusés ne s'affichent pas sur le calendrier)
-      const dayConges=conges.filter(c=>dateStr>=c.start && dateStr<=c.end && c.status!=='refusee');
+      // Congés posés manuellement (les refusés ne s'affichent pas sur le calendrier), filtrés par site
+      const dayConges=conges.filter(c=>dateStr>=c.start && dateStr<=c.end && c.status!=='refusee' && visibleIds.has(c.empId));
       const congeEmpIds=new Set(dayConges.map(c=>c.empId));
       tagsHtml=dayConges.map(c=>{
         const emp=employees.find(e=>e.id===c.empId);
@@ -999,8 +1020,8 @@ function renderCongesCalendar(){
         return `<div class="${cls}" style="background:${emp.color}" title="${titre}"><span>${icon}${initials}</span>${delBtn}</div>`;
       }).join('');
 
-      // Jours de repos habituels (absence par défaut, sauf s'il pointe exceptionnellement ce jour-là)
-      employees.forEach(emp=>{
+      // Jours de repos habituels (absence par défaut, sauf s'il pointe exceptionnellement ce jour-là), filtrés par site
+      visibleEmployees.forEach(emp=>{
         if(congeEmpIds.has(emp.id)) return; // déjà un congé (validé ou en attente) ce jour, pas de doublon
         const repos=emp.repos||[];
         if(!repos.includes(weekday)) return;
