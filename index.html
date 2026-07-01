@@ -127,6 +127,13 @@
     .legend-item{display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:var(--dark)}
     .legend-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
     .conges-tag-auto{opacity:.5;border:1px dashed rgba(255,255,255,.8)}
+    .conges-tag-pending{opacity:.7;border:1.5px dashed rgba(255,255,255,.9)}
+    .pending-item{background:#FFFBF0;border:1.5px solid var(--gold);border-radius:10px;padding:.7rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-bottom:.6rem;flex-wrap:wrap}
+    .pending-info{font-size:.82rem;color:var(--dark)}
+    .pending-info b{color:var(--navy)}
+    .pending-actions{display:flex;gap:.4rem}
+    .btn-approve{background:var(--green);color:#fff;border:none;border-radius:6px;padding:.4rem .7rem;font-size:.74rem;font-weight:700;cursor:pointer}
+    .btn-reject{background:var(--red);color:#fff;border:none;border-radius:6px;padding:.4rem .7rem;font-size:.74rem;font-weight:700;cursor:pointer}
     .days-check{display:flex;flex-wrap:wrap;gap:.4rem}
     .day-chip{display:flex;align-items:center;gap:.3rem;background:var(--off);border:1.5px solid var(--light);border-radius:6px;padding:.35rem .55rem;font-size:.72rem;cursor:pointer;user-select:none}
     .day-chip input{margin:0;cursor:pointer}
@@ -235,6 +242,11 @@
       <div class="form-row"><label>Au</label><input type="date" id="cEnd"/></div>
     </div>
     <button class="btn-add" style="max-width:220px" onclick="addConge()">✅ Enregistrer</button>
+  </div>
+
+  <div class="admin-card" id="pendingCongesCard" style="display:none;margin-bottom:1.2rem">
+    <h3>🕐 Demandes en attente de validation</h3>
+    <div id="pendingCongesList"></div>
   </div>
 
   <div class="admin-card">
@@ -439,7 +451,7 @@ firebase.auth().onAuthStateChanged(user=>{
     renderEmpGrid();
     if(document.getElementById('page-admin').classList.contains('active')) renderAdmin();
     if(document.getElementById('page-dashboard').classList.contains('active')) renderDash();
-    if(document.getElementById('page-conges').classList.contains('active')){ populateCongesForm(); renderCongesCalendar(); }
+    if(document.getElementById('page-conges').classList.contains('active')){ populateCongesForm(); renderCongesCalendar(); renderPendingConges(); }
   });
   pointagesRef.on('value', snap=>{
     pointages = snap.val() ? Object.values(snap.val()) : [];
@@ -459,7 +471,7 @@ firebase.auth().onAuthStateChanged(user=>{
   });
   congesRef.on('value', snap=>{
     conges = snap.val() ? Object.values(snap.val()) : [];
-    if(document.getElementById('page-conges').classList.contains('active')) renderCongesCalendar();
+    if(document.getElementById('page-conges').classList.contains('active')){ renderCongesCalendar(); renderPendingConges(); }
   });
 });
 
@@ -527,7 +539,7 @@ function showPage(id, btn){
   if(id==='dashboard') renderDash();
   if(id==='recap') renderRecap();
   if(id==='admin') renderAdmin();
-  if(id==='conges'){ populateCongesForm(); renderCongesCalendar(); }
+  if(id==='conges'){ populateCongesForm(); renderCongesCalendar(); renderPendingConges(); }
 }
 
 // ══════════════════════════════════════════
@@ -851,14 +863,56 @@ function addConge(){
   if(!start||!end){ toast('❌ Dates requises','t-error'); return; }
   if(end<start){ toast('❌ La date de fin doit être après la date de début','t-error'); return; }
 
-  conges.push({id:Date.now(),empId,type,start,end});
+  // Si c'est le gérant qui saisit directement (déverrouillé), la demande est validée automatiquement.
+  // Sinon (salarié via son PIN), elle reste en attente de validation.
+  const status=adminUnlocked?'validee':'attente';
+  conges.push({id:Date.now(),empId,type,start,end,status});
   saveConges();
 
   document.getElementById('cPin').value='';
   document.getElementById('cStart').value='';
   document.getElementById('cEnd').value='';
-  toast(`✅ ${type} enregistré pour ${emp.name}`,'t-success');
+  if(status==='attente') toast(`✅ Demande envoyée pour ${emp.name} — en attente de validation par le gérant`,'t-success');
+  else toast(`✅ ${type} enregistré et validé pour ${emp.name}`,'t-success');
   renderCongesCalendar();
+  renderPendingConges();
+}
+
+function validateConge(id, approuve){
+  if(!adminUnlocked){ toast('🔒 Seul le gérant peut valider une demande','t-error'); return; }
+  const c=conges.find(x=>x.id===id);
+  if(!c) return;
+  c.status=approuve?'validee':'refusee';
+  saveConges();
+  const emp=employees.find(e=>e.id===c.empId);
+  toast(approuve?`✅ Congé validé pour ${emp?emp.name:''}`:`❌ Congé refusé pour ${emp?emp.name:''}`, approuve?'t-success':'t-info');
+  renderPendingConges();
+  renderCongesCalendar();
+}
+
+function renderPendingConges(){
+  const card=document.getElementById('pendingCongesCard');
+  const list=document.getElementById('pendingCongesList');
+  if(!adminUnlocked){ card.style.display='none'; return; }
+
+  const pending=conges.filter(c=>c.status==='attente');
+  if(!pending.length){ card.style.display='none'; return; }
+  card.style.display='block';
+
+  list.innerHTML=pending.map(c=>{
+    const emp=employees.find(e=>e.id===c.empId);
+    if(!emp) return '';
+    const periode=c.start===c.end
+      ? new Date(c.start+'T12:00:00').toLocaleDateString('fr-FR')
+      : `${new Date(c.start+'T12:00:00').toLocaleDateString('fr-FR')} → ${new Date(c.end+'T12:00:00').toLocaleDateString('fr-FR')}`;
+    return `<div class="pending-item">
+      <div class="pending-info"><b>${emp.name}</b> — ${c.type} — ${periode}</div>
+      <div class="pending-actions">
+        <button class="btn-approve" onclick="validateConge(${c.id},true)">✅ Valider</button>
+        <button class="btn-reject" onclick="validateConge(${c.id},false)">❌ Refuser</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function deleteConge(id){
@@ -867,6 +921,7 @@ function deleteConge(id){
   conges=conges.filter(c=>c.id!==id);
   saveConges();
   renderCongesCalendar();
+  renderPendingConges();
   toast('🗑 Congé supprimé','t-info');
 }
 
@@ -885,7 +940,7 @@ function renderCongesCalendar(){
   legend.innerHTML=(employees.map(e=>
     `<div class="legend-item"><span class="legend-dot" style="background:${e.color}"></span>${e.name}</div>`
   ).join('') || '<span style="font-size:.78rem;color:var(--gray)">Aucun salarié enregistré</span>')
-    +'<div style="font-size:.7rem;color:var(--gray);width:100%;margin-top:.3rem">🟢 Couleur pleine = congé posé &nbsp;·&nbsp; 🔳 Couleur atténuée = jour de repos habituel</div>';
+    +'<div style="font-size:.7rem;color:var(--gray);width:100%;margin-top:.3rem">🟢 Couleur pleine = congé validé &nbsp;·&nbsp; 🕐 Pointillés = en attente de validation &nbsp;·&nbsp; 🔳 Couleur atténuée = jour de repos habituel</div>';
 
   const y=congesMonthDate.getFullYear(), m=congesMonthDate.getMonth();
   const firstDay=new Date(y,m,1);
@@ -908,20 +963,24 @@ function renderCongesCalendar(){
       isToday=dateStr===todayStr;
       const weekday=new Date(dateStr+'T12:00:00').getDay();
 
-      // Congés posés manuellement
-      const dayConges=conges.filter(c=>dateStr>=c.start && dateStr<=c.end);
+      // Congés posés manuellement (les refusés ne s'affichent pas sur le calendrier)
+      const dayConges=conges.filter(c=>dateStr>=c.start && dateStr<=c.end && c.status!=='refusee');
       const congeEmpIds=new Set(dayConges.map(c=>c.empId));
       tagsHtml=dayConges.map(c=>{
         const emp=employees.find(e=>e.id===c.empId);
         if(!emp) return '';
         const initials=emp.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
         const delBtn=adminUnlocked?`<button onclick="deleteConge(${c.id})" title="Supprimer">✕</button>`:'';
-        return `<div class="conges-tag" style="background:${emp.color}" title="${emp.name} — ${c.type}"><span>${initials}</span>${delBtn}</div>`;
+        const pending=c.status==='attente';
+        const cls=pending?'conges-tag conges-tag-pending':'conges-tag';
+        const icon=pending?'🕐 ':'';
+        const titre=`${emp.name} — ${c.type}${pending?' (en attente de validation)':''}`;
+        return `<div class="${cls}" style="background:${emp.color}" title="${titre}"><span>${icon}${initials}</span>${delBtn}</div>`;
       }).join('');
 
       // Jours de repos habituels (absence par défaut, sauf s'il pointe exceptionnellement ce jour-là)
       employees.forEach(emp=>{
-        if(congeEmpIds.has(emp.id)) return; // déjà un congé manuel ce jour, on n'affiche pas de doublon
+        if(congeEmpIds.has(emp.id)) return; // déjà un congé (validé ou en attente) ce jour, pas de doublon
         const repos=emp.repos||[];
         if(!repos.includes(weekday)) return;
         const aTravaille = pointages.some(p=>p.empId===emp.id && p.date===dateStr)
