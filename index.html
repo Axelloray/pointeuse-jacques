@@ -124,6 +124,11 @@
     .conges-tag button:hover{opacity:1}
     .legend-item{display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:var(--dark)}
     .legend-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
+    .conges-tag-auto{opacity:.5;border:1px dashed rgba(255,255,255,.8)}
+    .days-check{display:flex;flex-wrap:wrap;gap:.4rem}
+    .day-chip{display:flex;align-items:center;gap:.3rem;background:var(--off);border:1.5px solid var(--light);border-radius:6px;padding:.35rem .55rem;font-size:.72rem;cursor:pointer;user-select:none}
+    .day-chip input{margin:0;cursor:pointer}
+    .day-chip.checked{border-color:var(--gold);background:#FFFBF0}
 
     @media(max-width:600px){
       .conges-day{min-height:52px;font-size:.6rem;padding:.2rem}
@@ -229,7 +234,6 @@
       <div class="form-row"><label>Type</label>
         <select id="cType">
           <option value="Congés payés">🏖 Congés payés</option>
-          <option value="RTT">🕐 RTT</option>
           <option value="Maladie">🤒 Arrêt maladie</option>
           <option value="Absence">❌ Absence</option>
         </select>
@@ -291,6 +295,23 @@
   </div>
 </div>
 
+<!-- ══════════ MODALE ÉDITION SALARIÉ ══════════ -->
+<div class="modal-overlay" id="empModalOverlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title">✏️ Modifier le salarié</div>
+    <div class="form-row"><label>Prénom Nom</label><input type="text" id="eName"/></div>
+    <div class="form-row"><label>Code PIN (4 chiffres)</label><input type="password" id="ePin" maxlength="4"/></div>
+    <div class="form-row"><label>Site</label>
+      <select id="eSite"><option value="Site 1">Site 1</option><option value="Site 2">Site 2</option></select>
+    </div>
+    <div class="form-row"><label>Jours de repos habituels</label>
+      <div class="days-check" id="eRepos"></div>
+    </div>
+    <button class="btn-add" onclick="saveEmpModal()">💾 Enregistrer</button>
+    <button class="btn-cancel" onclick="closeEmpModal()">Annuler</button>
+  </div>
+</div>
+
 <!-- ══════════ PAGE RECAP ══════════ -->
 <div class="page" id="page-recap">
   <div class="dash-header">
@@ -320,6 +341,9 @@
       <div class="form-row"><label>Site</label>
         <select id="nSite"><option value="Site 1">Site 1</option><option value="Site 2">Site 2</option></select>
       </div>
+      <div class="form-row"><label>Jours de repos habituels <span style="text-transform:none;font-weight:400">(non travaillés)</span></label>
+        <div class="days-check" id="nRepos"></div>
+      </div>
       <button class="btn-add" onclick="addEmp()">Ajouter</button>
     </div>
     <div class="admin-card" style="grid-column:1/-1">
@@ -328,6 +352,7 @@
         <div class="form-row"><label>Email récapitulatif</label><input type="email" id="sEmail" value="gerant@boulangerie-desforges.fr"/></div>
         <div class="form-row"><label>Heures légales / semaine</label><input type="number" id="sHours" value="35" min="1" max="60"/></div>
         <div class="form-row"><label>Code d'accès gérant (4 chiffres)</label><input type="password" id="sAdminPin" maxlength="4" placeholder="••••"/></div>
+        <div class="form-row"><label>Seuil alerte heures sup. (h/jour)</label><input type="number" id="sSeuilSup" min="1" max="24" step="0.5" value="10"/></div>
       </div>
       <button class="btn-add" style="max-width:180px" onclick="saveSettings()">💾 Enregistrer</button>
     </div>
@@ -379,7 +404,7 @@ const defaultEmployees = [
 let employees = [];
 let pointages = [];
 let sessions  = {};   // {empId: {arrivee, date}}
-let settings  = {email:'gerant@boulangerie-desforges.fr', heures:35, adminPin:'0000'};
+let settings  = {email:'gerant@boulangerie-desforges.fr', heures:35, adminPin:'0000', seuilHeureSup:10};
 let conges    = [];   // {id, empId, type, start, end}
 let congesMonthDate = new Date();
 
@@ -422,11 +447,13 @@ firebase.auth().onAuthStateChanged(user=>{
     pointages = snap.val() ? Object.values(snap.val()) : [];
     if(document.getElementById('page-dashboard').classList.contains('active')) renderDash();
     if(document.getElementById('page-recap').classList.contains('active')) renderRecap();
+    if(document.getElementById('page-conges').classList.contains('active')) renderCongesCalendar();
   });
   sessionsRef.on('value', snap=>{
     sessions = snap.val() || {};
     renderEmpGrid();
     if(document.getElementById('page-dashboard').classList.contains('active')) renderDash();
+    if(document.getElementById('page-conges').classList.contains('active')) renderCongesCalendar();
   });
   settingsRef.on('value', snap=>{
     if(snap.val()) settings = snap.val();
@@ -616,6 +643,7 @@ function confirmPin(){
     savePointages();
     saveSessions();
     toast(`✅ Départ ${selEmp.name} — ${time} (${dur.toFixed(1)}h)`,'t-success');
+    checkOvertimeAndAlert(entry);
   }
   cancelPin();
 }
@@ -696,10 +724,12 @@ function saveModal(){
   if(modalMode==='edit-session'){
     if(depart){
       const dur=calcDuree(arrivee,depart);
-      pointages.push({id:Date.now(),empId,date,arrivee,depart,duree:dur});
+      const entry={id:Date.now(),empId,date,arrivee,depart,duree:dur};
+      pointages.push(entry);
       delete sessions[empId];
       savePointages(); saveSessions();
       toast('✅ Présence clôturée','t-success');
+      checkOvertimeAndAlert(entry);
     } else {
       sessions[empId]={arrivee,date};
       saveSessions();
@@ -711,11 +741,14 @@ function saveModal(){
     if(p){ p.empId=empId; p.date=date; p.arrivee=arrivee; p.depart=depart; p.duree=calcDuree(arrivee,depart); }
     savePointages();
     toast('✅ Pointage modifié','t-success');
+    if(p) checkOvertimeAndAlert(p);
   } else if(modalMode==='add-pointage'){
     if(!depart){ toast('❌ Heure de départ requise','t-error'); return; }
-    pointages.push({id:Date.now(),empId,date,arrivee,depart,duree:calcDuree(arrivee,depart)});
+    const entry={id:Date.now(),empId,date,arrivee,depart,duree:calcDuree(arrivee,depart)};
+    pointages.push(entry);
     savePointages();
     toast('✅ Pointage ajouté','t-success');
+    checkOvertimeAndAlert(entry);
   }
   closeModal();
   renderDash(); renderEmpGrid();
@@ -791,9 +824,10 @@ function renderCongesCalendar(){
 
   // Légende des couleurs par salarié
   const legend=document.getElementById('congesLegend');
-  legend.innerHTML=employees.map(e=>
+  legend.innerHTML=(employees.map(e=>
     `<div class="legend-item"><span class="legend-dot" style="background:${e.color}"></span>${e.name}</div>`
-  ).join('') || '<span style="font-size:.78rem;color:var(--gray)">Aucun salarié enregistré</span>';
+  ).join('') || '<span style="font-size:.78rem;color:var(--gray)">Aucun salarié enregistré</span>')
+    +'<div style="font-size:.7rem;color:var(--gray);width:100%;margin-top:.3rem">🟢 Couleur pleine = congé posé &nbsp;·&nbsp; 🔳 Couleur atténuée = jour de repos habituel</div>';
 
   const y=congesMonthDate.getFullYear(), m=congesMonthDate.getMonth();
   const firstDay=new Date(y,m,1);
@@ -814,7 +848,11 @@ function renderCongesCalendar(){
     if(inMonth){
       dateStr=`${y}-${pad(m+1)}-${pad(dayNum)}`;
       isToday=dateStr===todayStr;
+      const weekday=new Date(dateStr+'T12:00:00').getDay();
+
+      // Congés posés manuellement
       const dayConges=conges.filter(c=>dateStr>=c.start && dateStr<=c.end);
+      const congeEmpIds=new Set(dayConges.map(c=>c.empId));
       tagsHtml=dayConges.map(c=>{
         const emp=employees.find(e=>e.id===c.empId);
         if(!emp) return '';
@@ -822,6 +860,18 @@ function renderCongesCalendar(){
         const delBtn=adminUnlocked?`<button onclick="deleteConge(${c.id})" title="Supprimer">✕</button>`:'';
         return `<div class="conges-tag" style="background:${emp.color}" title="${emp.name} — ${c.type}"><span>${initials}</span>${delBtn}</div>`;
       }).join('');
+
+      // Jours de repos habituels (absence par défaut, sauf s'il pointe exceptionnellement ce jour-là)
+      employees.forEach(emp=>{
+        if(congeEmpIds.has(emp.id)) return; // déjà un congé manuel ce jour, on n'affiche pas de doublon
+        const repos=emp.repos||[];
+        if(!repos.includes(weekday)) return;
+        const aTravaille = pointages.some(p=>p.empId===emp.id && p.date===dateStr)
+          || (sessions[emp.id] && sessions[emp.id].date===dateStr);
+        if(aTravaille) return; // il a exceptionnellement pointé ce jour-là : pas d'absence affichée
+        const initials=emp.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+        tagsHtml+=`<div class="conges-tag conges-tag-auto" style="background:${emp.color}" title="${emp.name} — Jour de repos habituel"><span>${initials}</span></div>`;
+      });
     }
     html+=`<div class="conges-day ${inMonth?'':'outside'} ${isToday?'today':''}">
       ${inMonth?`<div class="conges-daynum">${dayNum}</div>`:''}
@@ -1060,38 +1110,86 @@ function sendEmail(){
 }
 
 // ══════════════════════════════════════════
+//  ALERTE AUTOMATIQUE HEURES SUPPLÉMENTAIRES
+// ══════════════════════════════════════════
+function checkOvertimeAndAlert(entry){
+  if(!entry || !entry.duree) return;
+  const seuil=settings.seuilHeureSup||10;
+  if(entry.duree<=seuil) return;
+
+  const emp=employees.find(e=>e.id===entry.empId);
+  if(!emp) return;
+  const dateLbl=new Date(entry.date+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const subject=`⚠️ Heures supplémentaires — ${emp.name} — ${dateLbl}`;
+  const message=`${emp.name} (${emp.site}) a réalisé ${entry.duree.toFixed(1)}h de travail le ${dateLbl}.\n\nArrivée : ${entry.arrivee}\nDépart : ${entry.depart}\nSeuil configuré : ${seuil}h/jour\n\nCeci constitue potentiellement des heures supplémentaires à vérifier.`;
+  const email=settings.email||'gerant@boulangerie-desforges.fr';
+
+  emailjs.send('service_i0lfwfg','template_s58kq34',{
+    to_email: email,
+    subject: subject,
+    message: message
+  }).then(()=>{
+    console.log('Alerte heures supplémentaires envoyée à', email);
+  }).catch(err=>{
+    console.error('Erreur envoi alerte heures sup :', err);
+  });
+}
+
+// ══════════════════════════════════════════
 //  ADMIN
 // ══════════════════════════════════════════
+const DAY_LABELS=[{v:1,l:'Lun'},{v:2,l:'Mar'},{v:3,l:'Mer'},{v:4,l:'Jeu'},{v:5,l:'Ven'},{v:6,l:'Sam'},{v:0,l:'Dim'}];
+
+function renderDayChips(containerId, selected){
+  const box=document.getElementById(containerId);
+  box.innerHTML=DAY_LABELS.map(d=>
+    `<label class="day-chip ${selected.includes(d.v)?'checked':''}">
+      <input type="checkbox" value="${d.v}" onchange="this.closest('.day-chip').classList.toggle('checked',this.checked)" ${selected.includes(d.v)?'checked':''}/>${d.l}
+    </label>`
+  ).join('');
+}
+
+function getCheckedDays(containerId){
+  return [...document.querySelectorAll('#'+containerId+' input:checked')].map(i=>+i.value);
+}
+
 function renderAdmin(){
   const list=document.getElementById('adminList');
   list.innerHTML='';
-  if(!employees.length){list.innerHTML='<p style="color:var(--gray);font-size:.82rem">Aucun salarié</p>';return;}
+  if(!employees.length){list.innerHTML='<p style="color:var(--gray);font-size:.82rem">Aucun salarié</p>';}
   employees.forEach(emp=>{
     const ini=emp.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+    const reposLbl=(emp.repos&&emp.repos.length)?DAY_LABELS.filter(d=>emp.repos.includes(d.v)).map(d=>d.l).join(', '):'Aucun';
     list.innerHTML+=`<div class="emp-list-item">
       <div class="emp-info">
         <div class="mini-av" style="background:${emp.color}">${ini}</div>
         <div>
           <div style="font-weight:700;font-size:.82rem">${emp.name}</div>
-          <div style="font-size:.7rem;color:var(--gray)">${emp.site} · PIN : ••••</div>
+          <div style="font-size:.7rem;color:var(--gray)">${emp.site} · PIN : •••• · Repos : ${reposLbl}</div>
         </div>
       </div>
-      <button class="btn-del" onclick="delEmp(${emp.id})">✕ Supprimer</button>
+      <div style="display:flex;gap:.35rem">
+        <button class="btn-edit" onclick="openEmpModal(${emp.id})">✏️</button>
+        <button class="btn-del" onclick="delEmp(${emp.id})">✕ Supprimer</button>
+      </div>
     </div>`;
   });
+  renderDayChips('nRepos',[]);
   document.getElementById('sEmail').value=settings.email||'';
   document.getElementById('sHours').value=settings.heures||35;
   document.getElementById('sAdminPin').value=settings.adminPin||'0000';
+  document.getElementById('sSeuilSup').value=settings.seuilHeureSup||10;
 }
 
 function addEmp(){
   const name=document.getElementById('nName').value.trim();
   const pin=document.getElementById('nPin').value.trim();
   const site=document.getElementById('nSite').value;
+  const repos=getCheckedDays('nRepos');
   if(!name){toast('❌ Nom requis','t-error');return;}
   if(!/^\d{4}$/.test(pin)){toast('❌ PIN : 4 chiffres exactement','t-error');return;}
   if(employees.some(e=>e.pin===pin)){toast('❌ Ce PIN est déjà utilisé','t-error');return;}
-  const emp={id:Date.now(),name,pin,site,color:COLORS[employees.length%COLORS.length]};
+  const emp={id:Date.now(),name,pin,site,repos,color:COLORS[employees.length%COLORS.length]};
   employees.push(emp);
   saveEmployees();
   document.getElementById('nName').value='';
@@ -1110,9 +1208,46 @@ function delEmp(id){
   toast('Salarié supprimé','t-info');
 }
 
+// ── Édition d'un salarié (nom, PIN, site, jours de repos) ──
+let empModalTarget=null;
+
+function openEmpModal(id){
+  const emp=employees.find(e=>e.id===id);
+  if(!emp) return;
+  empModalTarget=id;
+  document.getElementById('eName').value=emp.name;
+  document.getElementById('ePin').value=emp.pin;
+  document.getElementById('eSite').value=emp.site;
+  renderDayChips('eRepos', emp.repos||[]);
+  document.getElementById('empModalOverlay').style.display='flex';
+}
+
+function closeEmpModal(){
+  document.getElementById('empModalOverlay').style.display='none';
+  empModalTarget=null;
+}
+
+function saveEmpModal(){
+  const emp=employees.find(e=>e.id===empModalTarget);
+  if(!emp) return;
+  const name=document.getElementById('eName').value.trim();
+  const pin=document.getElementById('ePin').value.trim();
+  const site=document.getElementById('eSite').value;
+  const repos=getCheckedDays('eRepos');
+  if(!name){toast('❌ Nom requis','t-error');return;}
+  if(!/^\d{4}$/.test(pin)){toast('❌ PIN : 4 chiffres exactement','t-error');return;}
+  if(employees.some(e=>e.pin===pin && e.id!==emp.id)){toast('❌ Ce PIN est déjà utilisé','t-error');return;}
+  emp.name=name; emp.pin=pin; emp.site=site; emp.repos=repos;
+  saveEmployees();
+  closeEmpModal();
+  renderAdmin(); renderEmpGrid();
+  toast('✅ Salarié modifié','t-success');
+}
+
 function saveSettings(){
   settings.email=document.getElementById('sEmail').value.trim();
   settings.heures=+document.getElementById('sHours').value||35;
+  settings.seuilHeureSup=+document.getElementById('sSeuilSup').value||10;
   const newPin=document.getElementById('sAdminPin').value.trim();
   if(/^\d{4}$/.test(newPin)) settings.adminPin=newPin;
   else { toast('❌ Code gérant : 4 chiffres exactement','t-error'); return; }
