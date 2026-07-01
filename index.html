@@ -112,6 +112,16 @@
     .btn-add{width:100%;background:var(--navy);color:#fff;border:none;border-radius:6px;padding:.6rem;font-size:.82rem;font-weight:700;cursor:pointer;transition:background .2s;margin-top:.2rem}
     .btn-add:hover{background:var(--gold);color:var(--navy)}
 
+    /* ── MODAL ── */
+    .modal-overlay{position:fixed;inset:0;background:rgba(13,27,42,.6);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1rem}
+    .modal-box{background:#fff;border-radius:14px;padding:1.6rem;max-width:340px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+    .modal-title{font-weight:700;font-size:1rem;color:var(--navy);margin-bottom:1rem}
+    .sess-card{background:#fff;border:1.5px solid var(--gold);border-radius:10px;padding:.7rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-bottom:.6rem;flex-wrap:wrap}
+    .sess-info{font-size:.82rem;color:var(--dark)}
+    .sess-info b{color:var(--navy)}
+    .btn-edit{background:var(--off);border:1.5px solid var(--light);border-radius:6px;padding:.3rem .6rem;font-size:.72rem;font-weight:700;cursor:pointer;color:var(--navy)}
+    .btn-edit:hover{background:var(--gold);border-color:var(--gold)}
+
     /* ── TOAST ── */
     .toast{position:fixed;top:1rem;right:1rem;padding:.75rem 1.2rem;border-radius:8px;font-weight:700;font-size:.86rem;z-index:9999;transform:translateY(-100px);transition:transform .3s;box-shadow:0 4px 18px rgba(0,0,0,.18);max-width:320px}
     .toast.show{transform:translateY(0)}
@@ -199,13 +209,29 @@
         <option value="week">Cette semaine</option>
         <option value="month" selected>Ce mois</option>
       </select>
+      <button class="btn-sm btn-navy" onclick="openAddModal()">✏️ Pointage manuel</button>
       <button class="btn-sm btn-navy" onclick="exportCSV()">⬇ Export CSV</button>
     </div>
   </div>
+  <div id="activeSessions"></div>
   <div class="stats-row" id="statsRow"></div>
   <div class="table-wrap">
-    <table><thead><tr><th>Salarié</th><th>Date</th><th>Arrivée</th><th>Départ</th><th>Durée</th><th>Statut</th></tr></thead>
+    <table><thead><tr><th>Salarié</th><th>Date</th><th>Arrivée</th><th>Départ</th><th>Durée</th><th>Statut</th><th>Actions</th></tr></thead>
     <tbody id="dashTbody"></tbody></table>
+  </div>
+</div>
+
+<!-- ══════════ MODALE ÉDITION POINTAGE ══════════ -->
+<div class="modal-overlay" id="modalOverlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title" id="modalTitle">Modifier un pointage</div>
+    <div class="form-row"><label>Salarié</label><select id="mEmp"></select></div>
+    <div class="form-row"><label>Date</label><input type="date" id="mDate"/></div>
+    <div class="form-row"><label>Heure d'arrivée</label><input type="time" id="mArrivee"/></div>
+    <div class="form-row"><label>Heure de départ <span style="text-transform:none;font-weight:400">(laisser vide si toujours en poste)</span></label><input type="time" id="mDepart"/></div>
+    <button class="btn-add" onclick="saveModal()">💾 Enregistrer</button>
+    <button class="btn-cancel" onclick="closeModal()">Annuler</button>
+    <button class="btn-del" id="mDeleteBtn" style="width:100%;margin-top:.5rem;padding:.55rem;border-radius:6px" onclick="deleteModal()">🗑 Supprimer ce pointage</button>
   </div>
 </div>
 
@@ -528,6 +554,122 @@ function confirmPin(){
 }
 
 // ══════════════════════════════════════════
+//  MODALE ÉDITION / AJOUT / CORRECTION POINTAGE
+// ══════════════════════════════════════════
+let modalMode=null, modalTarget=null;
+
+function calcDuree(arrivee,depart){
+  const [ah,am]=arrivee.split(':').map(Number);
+  const [dh,dm]=depart.split(':').map(Number);
+  let dur=((dh*60+dm)-(ah*60+am))/60;
+  if(dur<0) dur+=24;
+  return +dur.toFixed(2);
+}
+
+function populateModalEmpSelect(selectedId){
+  const sel=document.getElementById('mEmp');
+  sel.innerHTML='';
+  employees.forEach(e=>sel.appendChild(new Option(e.name,e.id)));
+  if(selectedId!==undefined) sel.value=selectedId;
+  sel.disabled=false;
+}
+
+function openEditModal(pointageId){
+  const p=pointages.find(x=>x.id===pointageId);
+  if(!p) return;
+  modalMode='edit-pointage'; modalTarget=pointageId;
+  document.getElementById('modalTitle').textContent='✏️ Modifier un pointage';
+  populateModalEmpSelect(p.empId);
+  document.getElementById('mDate').value=p.date;
+  document.getElementById('mArrivee').value=p.arrivee;
+  document.getElementById('mDepart').value=p.depart||'';
+  document.getElementById('mDeleteBtn').style.display='block';
+  document.getElementById('modalOverlay').style.display='flex';
+}
+
+function openAddModal(){
+  modalMode='add-pointage'; modalTarget=null;
+  document.getElementById('modalTitle').textContent='➕ Ajouter un pointage manuel';
+  populateModalEmpSelect();
+  document.getElementById('mDate').value=new Date().toISOString().split('T')[0];
+  document.getElementById('mArrivee').value='';
+  document.getElementById('mDepart').value='';
+  document.getElementById('mDeleteBtn').style.display='none';
+  document.getElementById('modalOverlay').style.display='flex';
+}
+
+function openSessionEditModal(empId){
+  const sess=sessions[empId];
+  if(!sess) return;
+  modalMode='edit-session'; modalTarget=empId;
+  document.getElementById('modalTitle').textContent='✏️ Corriger / clôturer une présence';
+  populateModalEmpSelect(empId);
+  document.getElementById('mEmp').disabled=true;
+  document.getElementById('mDate').value=sess.date;
+  document.getElementById('mArrivee').value=sess.arrivee;
+  document.getElementById('mDepart').value='';
+  document.getElementById('mDeleteBtn').style.display='block';
+  document.getElementById('modalOverlay').style.display='flex';
+}
+
+function closeModal(){
+  document.getElementById('modalOverlay').style.display='none';
+  document.getElementById('mEmp').disabled=false;
+  modalMode=null; modalTarget=null;
+}
+
+function saveModal(){
+  const empId=+document.getElementById('mEmp').value;
+  const date=document.getElementById('mDate').value;
+  const arrivee=document.getElementById('mArrivee').value;
+  const depart=document.getElementById('mDepart').value;
+
+  if(!date||!arrivee){ toast("❌ Date et heure d'arrivée requises",'t-error'); return; }
+
+  if(modalMode==='edit-session'){
+    if(depart){
+      const dur=calcDuree(arrivee,depart);
+      pointages.push({id:Date.now(),empId,date,arrivee,depart,duree:dur});
+      delete sessions[empId];
+      savePointages(); saveSessions();
+      toast('✅ Présence clôturée','t-success');
+    } else {
+      sessions[empId]={arrivee,date};
+      saveSessions();
+      toast("✅ Heure d'arrivée mise à jour",'t-success');
+    }
+  } else if(modalMode==='edit-pointage'){
+    if(!depart){ toast('❌ Heure de départ requise','t-error'); return; }
+    const p=pointages.find(x=>x.id===modalTarget);
+    if(p){ p.empId=empId; p.date=date; p.arrivee=arrivee; p.depart=depart; p.duree=calcDuree(arrivee,depart); }
+    savePointages();
+    toast('✅ Pointage modifié','t-success');
+  } else if(modalMode==='add-pointage'){
+    if(!depart){ toast('❌ Heure de départ requise','t-error'); return; }
+    pointages.push({id:Date.now(),empId,date,arrivee,depart,duree:calcDuree(arrivee,depart)});
+    savePointages();
+    toast('✅ Pointage ajouté','t-success');
+  }
+  closeModal();
+  renderDash(); renderEmpGrid();
+}
+
+function deleteModal(){
+  if(!confirm('Supprimer cette entrée ?')) return;
+  if(modalMode==='edit-session'){
+    delete sessions[modalTarget];
+    saveSessions();
+    toast('🗑 Présence supprimée','t-info');
+  } else if(modalMode==='edit-pointage'){
+    pointages=pointages.filter(x=>x.id!==modalTarget);
+    savePointages();
+    toast('🗑 Pointage supprimé','t-info');
+  }
+  closeModal();
+  renderDash(); renderEmpGrid();
+}
+
+// ══════════════════════════════════════════
 //  TOAST
 // ══════════════════════════════════════════
 function toast(msg,cls='t-info'){
@@ -577,6 +719,24 @@ function renderDash(){
     <div class="stat-card"><div class="stat-label">Moyenne / salarié</div><div class="stat-val">${moy}h</div><div class="stat-sub">sur la période</div></div>
     <div class="stat-card"><div class="stat-label">En service</div><div class="stat-val">${Object.keys(sessions).length}</div><div class="stat-sub">présents actuellement</div></div>`;
 
+  // Présences en cours (utile pour corriger un oubli de pointage de départ)
+  const activeBox=document.getElementById('activeSessions');
+  const activeIds=Object.keys(sessions);
+  if(activeIds.length){
+    activeBox.innerHTML=`<p style="font-size:.78rem;color:var(--gray);font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:.5rem">⏱ Présences en cours</p>`+
+      activeIds.map(id=>{
+        const emp=employees.find(e=>String(e.id)===String(id));
+        if(!emp) return '';
+        const sess=sessions[id];
+        return `<div class="sess-card">
+          <div class="sess-info"><b>${emp.name}</b> — arrivé(e) à ${sess.arrivee} le ${new Date(sess.date+'T12:00:00').toLocaleDateString('fr-FR')}</div>
+          <button class="btn-edit" onclick="openSessionEditModal('${id}')">✏️ Corriger / clôturer</button>
+        </div>`;
+      }).join('');
+  } else {
+    activeBox.innerHTML='';
+  }
+
   const tbody=document.getElementById('dashTbody');
   tbody.innerHTML='';
   [...data].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,60).forEach(p=>{
@@ -588,9 +748,10 @@ function renderDash(){
       <td><strong>${emp.name}</strong><br><span style="font-size:.7rem;color:var(--gray)">${emp.site}</span></td>
       <td>${dd}</td><td>${p.arrivee}</td><td>${p.depart||'—'}</td>
       <td><strong>${p.duree.toFixed(1)}h</strong></td>
-      <td><span class="badge ${cls}">${lbl}</span></td></tr>`;
+      <td><span class="badge ${cls}">${lbl}</span></td>
+      <td><button class="btn-edit" onclick="openEditModal(${p.id})">✏️ Modifier</button></td></tr>`;
   });
-  if(!data.length) tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--gray)">Aucun pointage sur cette période</td></tr>';
+  if(!data.length) tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--gray)">Aucun pointage sur cette période</td></tr>';
 }
 
 // ══════════════════════════════════════════
