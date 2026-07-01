@@ -112,6 +112,24 @@
     .btn-add{width:100%;background:var(--navy);color:#fff;border:none;border-radius:6px;padding:.6rem;font-size:.82rem;font-weight:700;cursor:pointer;transition:background .2s;margin-top:.2rem}
     .btn-add:hover{background:var(--gold);color:var(--navy)}
 
+    /* ── CONGÉS / CALENDRIER ── */
+    .conges-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.4rem}
+    .conges-daylabel{font-size:.68rem;font-weight:700;color:var(--gray);text-align:center;padding:.3rem 0;text-transform:uppercase}
+    .conges-day{background:var(--off);border-radius:6px;min-height:74px;padding:.3rem;font-size:.7rem;border:1px solid var(--light)}
+    .conges-day.outside{opacity:.3}
+    .conges-day.today{border-color:var(--gold);border-width:2px}
+    .conges-daynum{font-weight:700;color:var(--navy);margin-bottom:.25rem;font-size:.72rem}
+    .conges-tag{border-radius:4px;padding:.08rem .35rem;font-size:.62rem;font-weight:700;color:#fff;margin-bottom:.15rem;display:flex;align-items:center;justify-content:space-between;gap:.2rem}
+    .conges-tag button{background:none;border:none;color:#fff;cursor:pointer;font-size:.68rem;padding:0;line-height:1;opacity:.85}
+    .conges-tag button:hover{opacity:1}
+    .legend-item{display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:var(--dark)}
+    .legend-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
+
+    @media(max-width:600px){
+      .conges-day{min-height:52px;font-size:.6rem;padding:.2rem}
+      .conges-tag{font-size:.56rem}
+    }
+
     /* ── MODAL ── */
     .modal-overlay{position:fixed;inset:0;background:rgba(13,27,42,.6);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1rem}
     .modal-box{background:#fff;border-radius:14px;padding:1.6rem;max-width:340px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3)}
@@ -155,6 +173,7 @@
   </div>
   <div class="nav-tabs">
     <button class="tab active" onclick="showPage('pointer',this)">⏱ Pointer</button>
+    <button class="tab" onclick="showPage('conges',this)">🏖 Congés</button>
     <button class="tab" id="tabDashboard" style="display:none" onclick="showPage('dashboard',this)">📊 Dashboard</button>
     <button class="tab" id="tabRecap" style="display:none" onclick="showPage('recap',this)">📅 Récap</button>
     <button class="tab" id="tabAdmin" style="display:none" onclick="showPage('admin',this)">⚙️ Admin</button>
@@ -195,6 +214,43 @@
     </div>
     <button class="btn-confirm" id="btnConfirm" onclick="confirmPin()" disabled>VALIDER</button>
     <button class="btn-cancel" onclick="cancelPin()">← Retour</button>
+  </div>
+</div>
+
+<!-- ══════════ PAGE CONGÉS ══════════ -->
+<div class="page" id="page-conges">
+  <div class="dash-header"><div class="dash-title">🏖 Congés & Absences</div></div>
+
+  <div class="admin-card" style="margin-bottom:1.2rem">
+    <h3>➕ Poser un congé / signaler une absence</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.8rem">
+      <div class="form-row"><label>Salarié</label><select id="cEmp"></select></div>
+      <div class="form-row"><label>Code PIN</label><input type="password" id="cPin" maxlength="4" placeholder="••••"/></div>
+      <div class="form-row"><label>Type</label>
+        <select id="cType">
+          <option value="Congés payés">🏖 Congés payés</option>
+          <option value="RTT">🕐 RTT</option>
+          <option value="Maladie">🤒 Arrêt maladie</option>
+          <option value="Absence">❌ Absence</option>
+        </select>
+      </div>
+      <div class="form-row"><label>Du</label><input type="date" id="cStart"/></div>
+      <div class="form-row"><label>Au</label><input type="date" id="cEnd"/></div>
+    </div>
+    <button class="btn-add" style="max-width:220px" onclick="addConge()">✅ Enregistrer</button>
+  </div>
+
+  <div class="admin-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
+      <h3 style="border:none;margin:0;padding:0">📅 Calendrier</h3>
+      <div style="display:flex;align-items:center;gap:.6rem">
+        <button class="btn-sm btn-navy" onclick="changeCongesMonth(-1)">◀</button>
+        <span id="congesMonthLabel" style="font-weight:700;color:var(--navy);min-width:150px;text-align:center;display:inline-block"></span>
+        <button class="btn-sm btn-navy" onclick="changeCongesMonth(1)">▶</button>
+      </div>
+    </div>
+    <div id="congesLegend" style="display:flex;flex-wrap:wrap;gap:.9rem;margin-bottom:1rem"></div>
+    <div id="congesCalendar" class="conges-grid"></div>
   </div>
 </div>
 
@@ -324,6 +380,8 @@ let employees = [];
 let pointages = [];
 let sessions  = {};   // {empId: {arrivee, date}}
 let settings  = {email:'gerant@boulangerie-desforges.fr', heures:35, adminPin:'0000'};
+let conges    = [];   // {id, empId, type, start, end}
+let congesMonthDate = new Date();
 
 let adminUnlocked = false;
 
@@ -334,11 +392,13 @@ const employeesRef = db.ref('employees');
 const pointagesRef = db.ref('pointages');
 const sessionsRef  = db.ref('sessions');
 const settingsRef  = db.ref('settings');
+const congesRef    = db.ref('conges');
 
 function saveEmployees(){ employeesRef.set(employees); }
 function savePointages(){ pointagesRef.set(pointages); }
 function saveSessions(){ sessionsRef.set(sessions); }
 function saveSettingsData(){ settingsRef.set(settings); }
+function saveConges(){ congesRef.set(conges); }
 
 // On attend d'être authentifié (connexion anonyme) avant de lire/écrire la base
 firebase.auth().onAuthStateChanged(user=>{
@@ -348,6 +408,7 @@ firebase.auth().onAuthStateChanged(user=>{
   employeesRef.once('value').then(snap=>{ if(!snap.exists()) employeesRef.set(defaultEmployees); });
   pointagesRef.once('value').then(snap=>{ if(!snap.exists()) pointagesRef.set(genDemo()); });
   settingsRef.once('value').then(snap=>{ if(!snap.exists()) settingsRef.set(settings); });
+  congesRef.once('value').then(snap=>{ if(!snap.exists()) congesRef.set([]); });
 
   // Écoute en temps réel : dès qu'un appareil modifie une donnée, tous les autres se mettent à jour automatiquement
   employeesRef.on('value', snap=>{
@@ -355,6 +416,7 @@ firebase.auth().onAuthStateChanged(user=>{
     renderEmpGrid();
     if(document.getElementById('page-admin').classList.contains('active')) renderAdmin();
     if(document.getElementById('page-dashboard').classList.contains('active')) renderDash();
+    if(document.getElementById('page-conges').classList.contains('active')){ populateCongesForm(); renderCongesCalendar(); }
   });
   pointagesRef.on('value', snap=>{
     pointages = snap.val() ? Object.values(snap.val()) : [];
@@ -369,6 +431,10 @@ firebase.auth().onAuthStateChanged(user=>{
   settingsRef.on('value', snap=>{
     if(snap.val()) settings = snap.val();
     if(document.getElementById('page-admin').classList.contains('active')) renderAdmin();
+  });
+  congesRef.on('value', snap=>{
+    conges = snap.val() ? Object.values(snap.val()) : [];
+    if(document.getElementById('page-conges').classList.contains('active')) renderCongesCalendar();
   });
 });
 
@@ -436,6 +502,7 @@ function showPage(id, btn){
   if(id==='dashboard') renderDash();
   if(id==='recap') renderRecap();
   if(id==='admin') renderAdmin();
+  if(id==='conges'){ populateCongesForm(); renderCongesCalendar(); }
 }
 
 // ══════════════════════════════════════════
@@ -667,6 +734,101 @@ function deleteModal(){
   }
   closeModal();
   renderDash(); renderEmpGrid();
+}
+
+// ══════════════════════════════════════════
+//  CONGÉS & CALENDRIER
+// ══════════════════════════════════════════
+function populateCongesForm(){
+  const sel=document.getElementById('cEmp');
+  const prev=sel.value;
+  sel.innerHTML='';
+  employees.forEach(e=>sel.appendChild(new Option(e.name,e.id)));
+  if(prev) sel.value=prev;
+}
+
+function addConge(){
+  const empId=+document.getElementById('cEmp').value;
+  const pin=document.getElementById('cPin').value.trim();
+  const type=document.getElementById('cType').value;
+  const start=document.getElementById('cStart').value;
+  const end=document.getElementById('cEnd').value;
+  const emp=employees.find(e=>e.id===empId);
+
+  if(!emp){ toast('❌ Sélectionnez un salarié','t-error'); return; }
+  if(!adminUnlocked && pin!==emp.pin){ toast('❌ Code PIN incorrect','t-error'); return; }
+  if(!start||!end){ toast('❌ Dates requises','t-error'); return; }
+  if(end<start){ toast('❌ La date de fin doit être après la date de début','t-error'); return; }
+
+  conges.push({id:Date.now(),empId,type,start,end});
+  saveConges();
+
+  document.getElementById('cPin').value='';
+  document.getElementById('cStart').value='';
+  document.getElementById('cEnd').value='';
+  toast(`✅ ${type} enregistré pour ${emp.name}`,'t-success');
+  renderCongesCalendar();
+}
+
+function deleteConge(id){
+  if(!adminUnlocked){ toast('🔒 Seul le gérant peut supprimer un congé','t-error'); return; }
+  if(!confirm('Supprimer ce congé ?')) return;
+  conges=conges.filter(c=>c.id!==id);
+  saveConges();
+  renderCongesCalendar();
+  toast('🗑 Congé supprimé','t-info');
+}
+
+function changeCongesMonth(delta){
+  congesMonthDate.setMonth(congesMonthDate.getMonth()+delta);
+  renderCongesCalendar();
+}
+
+function renderCongesCalendar(){
+  const label=document.getElementById('congesMonthLabel');
+  const lbl=congesMonthDate.toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+  label.textContent=lbl.charAt(0).toUpperCase()+lbl.slice(1);
+
+  // Légende des couleurs par salarié
+  const legend=document.getElementById('congesLegend');
+  legend.innerHTML=employees.map(e=>
+    `<div class="legend-item"><span class="legend-dot" style="background:${e.color}"></span>${e.name}</div>`
+  ).join('') || '<span style="font-size:.78rem;color:var(--gray)">Aucun salarié enregistré</span>';
+
+  const y=congesMonthDate.getFullYear(), m=congesMonthDate.getMonth();
+  const firstDay=new Date(y,m,1);
+  const startOffset=(firstDay.getDay()+6)%7; // lundi = 0
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const todayStr=new Date().toISOString().split('T')[0];
+  const pad=n=>String(n).padStart(2,'0');
+
+  const cal=document.getElementById('congesCalendar');
+  let html='';
+  ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].forEach(d=>html+=`<div class="conges-daylabel">${d}</div>`);
+
+  const totalCells=Math.ceil((startOffset+daysInMonth)/7)*7;
+  for(let i=0;i<totalCells;i++){
+    const dayNum=i-startOffset+1;
+    const inMonth=dayNum>=1 && dayNum<=daysInMonth;
+    let tagsHtml='', dateStr='', isToday=false;
+    if(inMonth){
+      dateStr=`${y}-${pad(m+1)}-${pad(dayNum)}`;
+      isToday=dateStr===todayStr;
+      const dayConges=conges.filter(c=>dateStr>=c.start && dateStr<=c.end);
+      tagsHtml=dayConges.map(c=>{
+        const emp=employees.find(e=>e.id===c.empId);
+        if(!emp) return '';
+        const initials=emp.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+        const delBtn=adminUnlocked?`<button onclick="deleteConge(${c.id})" title="Supprimer">✕</button>`:'';
+        return `<div class="conges-tag" style="background:${emp.color}" title="${emp.name} — ${c.type}"><span>${initials}</span>${delBtn}</div>`;
+      }).join('');
+    }
+    html+=`<div class="conges-day ${inMonth?'':'outside'} ${isToday?'today':''}">
+      ${inMonth?`<div class="conges-daynum">${dayNum}</div>`:''}
+      ${tagsHtml}
+    </div>`;
+  }
+  cal.innerHTML=html;
 }
 
 // ══════════════════════════════════════════
