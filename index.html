@@ -1,22 +1,689 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pointeuse Jacques</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Pointeuse en ligne — Boulangerie des Forges"/>
+  <title>Pointeuse — Boulangerie des Forges</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{--navy:#0D1B2A;--gold:#C8A84B;--red:#ED2939;--blue:#002395;--green:#1A7A4A;--off:#F5F3EE;--gray:#6B7280;--light:#E5E7EB;--dark:#1F2937;--white:#fff}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:var(--off);color:var(--dark);min-height:100vh}
+
+    nav{background:var(--navy);padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:58px;border-bottom:2px solid var(--gold);position:sticky;top:0;z-index:100}
+    .nav-logo{display:flex;align-items:center;gap:10px}
+    .brand{color:#fff;font-family:Georgia,serif;font-size:1.1rem;font-weight:700;letter-spacing:2px}
+    .brand-sub{color:var(--gold);font-size:.55rem;letter-spacing:3px;display:block;margin-top:-2px}
+    .nav-tabs{display:flex;gap:.3rem}
+    .tab{background:transparent;border:none;color:#94A3B8;padding:.5rem .9rem;border-radius:5px;cursor:pointer;font-size:.78rem;font-weight:600;letter-spacing:.5px;transition:all .2s}
+    .tab.active{background:var(--gold);color:var(--navy)}
+    .tab:hover:not(.active){color:#fff;background:rgba(255,255,255,.08)}
+    .nav-time{color:var(--gold);font-family:Georgia,serif;font-size:1rem;font-weight:700;letter-spacing:1px}
+
+    .page{display:none;padding:1.5rem;max-width:920px;margin:0 auto}
+    .page.active{display:block}
+
+    /* ── POINTER ── */
+    .clock-header{text-align:center;margin-bottom:1.5rem}
+    .clock-date{color:var(--gray);font-size:.85rem;letter-spacing:1px;margin-bottom:.3rem}
+    .clock-time{color:var(--navy);font-family:Georgia,serif;font-size:3rem;font-weight:700;letter-spacing:2px}
+
+    .emp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:.8rem;margin-bottom:1.5rem}
+    .emp-btn{background:#fff;border:2px solid var(--light);border-radius:10px;padding:1rem .8rem;cursor:pointer;text-align:center;transition:all .2s;user-select:none}
+    .emp-btn:hover{border-color:var(--gold);transform:translateY(-2px);box-shadow:0 4px 14px rgba(0,0,0,.09)}
+    .emp-btn.selected{border-color:var(--gold);background:#FFFBF0}
+    .emp-avatar{width:46px;height:46px;border-radius:50%;margin:0 auto .5rem;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;color:#fff}
+    .emp-name{font-size:.8rem;font-weight:700;color:var(--dark);line-height:1.2}
+    .emp-site{font-size:.67rem;color:var(--gray);margin-top:.15rem}
+    .emp-status{font-size:.65rem;margin-top:.3rem;font-weight:600;padding:.15rem .45rem;border-radius:10px;display:inline-block}
+    .status-in{background:#D1FAE5;color:#065F46}
+    .status-out{background:#FEE2E2;color:#991B1B}
+
+    .pin-panel{background:#fff;border-radius:14px;padding:1.6rem;border:1.5px solid var(--light);max-width:310px;margin:0 auto;box-shadow:0 4px 20px rgba(0,0,0,.08)}
+    .pin-title{text-align:center;font-weight:700;font-size:1rem;color:var(--navy);margin-bottom:.25rem}
+    .pin-sub{text-align:center;font-size:.78rem;color:var(--gray);margin-bottom:1rem;line-height:1.4}
+    .pin-display{background:var(--navy);border-radius:8px;padding:.85rem 1rem;text-align:center;font-family:Georgia,serif;font-size:1.9rem;letter-spacing:.7rem;color:var(--gold);min-height:56px;margin-bottom:1rem}
+    .pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-bottom:.6rem}
+    .pin-key{background:var(--off);border:1.5px solid var(--light);border-radius:8px;padding:.9rem;font-size:1.1rem;font-weight:700;cursor:pointer;text-align:center;transition:all .15s;color:var(--dark)}
+    .pin-key:hover{background:var(--navy);color:#fff;border-color:var(--navy)}
+    .pin-key:active{transform:scale(.93)}
+    .pin-del{background:#FEE2E2;border-color:#FECACA;color:var(--red)}
+    .pin-del:hover{background:var(--red);color:#fff;border-color:var(--red)}
+    .btn-confirm{width:100%;background:var(--gold);color:var(--navy);border:none;border-radius:8px;padding:.85rem;font-size:.95rem;font-weight:700;cursor:pointer;transition:background .2s;margin-top:.3rem;letter-spacing:.5px}
+    .btn-confirm:hover{background:#E8D060}
+    .btn-confirm:disabled{background:var(--light);color:var(--gray);cursor:not-allowed}
+    .btn-cancel{width:100%;background:transparent;border:1.5px solid var(--light);border-radius:8px;padding:.55rem;font-size:.82rem;color:var(--gray);cursor:pointer;margin-top:.4rem}
+    .btn-cancel:hover{border-color:var(--gray)}
+
+    /* ── DASHBOARD ── */
+    .dash-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.2rem;flex-wrap:wrap;gap:.8rem}
+    .dash-title{font-family:Georgia,serif;font-size:1.4rem;color:var(--navy);font-weight:700}
+    .dash-controls{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+    .sel{border:1.5px solid var(--light);border-radius:6px;padding:.4rem .7rem;font-size:.8rem;color:var(--dark);background:#fff;cursor:pointer}
+    .btn-sm{border:none;padding:.42rem .9rem;border-radius:6px;font-size:.76rem;font-weight:700;cursor:pointer;transition:all .2s}
+    .btn-navy{background:var(--navy);color:#fff}.btn-navy:hover{background:var(--gold);color:var(--navy)}
+    .btn-green{background:var(--green);color:#fff}.btn-green:hover{background:#145f38}
+    .btn-red{background:var(--red);color:#fff}
+
+    .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:.8rem;margin-bottom:1.4rem}
+    .stat-card{background:#fff;border-radius:10px;padding:1rem 1.2rem;border:1.5px solid var(--light)}
+    .stat-label{font-size:.7rem;color:var(--gray);font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:.3rem}
+    .stat-val{font-family:Georgia,serif;font-size:1.6rem;font-weight:700;color:var(--navy)}
+    .stat-sub{font-size:.68rem;color:var(--gray);margin-top:.1rem}
+
+    .table-wrap{background:#fff;border-radius:10px;border:1.5px solid var(--light);overflow:auto}
+    table{width:100%;border-collapse:collapse;min-width:520px}
+    thead{background:var(--navy)}
+    th{padding:.65rem 1rem;text-align:left;color:#fff;font-size:.73rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap}
+    td{padding:.58rem 1rem;font-size:.81rem;border-bottom:1px solid var(--light);color:var(--dark)}
+    tr:last-child td{border-bottom:none}
+    tr:hover td{background:var(--off)}
+    .badge{padding:.16rem .5rem;border-radius:4px;font-size:.67rem;font-weight:700;white-space:nowrap}
+    .b-green{background:#D1FAE5;color:#065F46}
+    .b-red{background:#FEE2E2;color:#991B1B}
+    .b-gold{background:#FEF3C7;color:#92400E}
+
+    /* ── RECAP ── */
+    .recap-emp{background:#fff;border-radius:10px;border:1.5px solid var(--light);margin-bottom:1rem;overflow:hidden}
+    .recap-head{background:var(--navy);padding:.85rem 1.2rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem}
+    .recap-name{color:#fff;font-weight:700;font-size:.9rem;display:flex;align-items:center;gap:.6rem}
+    .recap-total{color:var(--gold);font-family:Georgia,serif;font-size:1.1rem;font-weight:700;text-align:right}
+    .recap-weeks{padding:.8rem 1.2rem}
+    .week-row{display:flex;justify-content:space-between;align-items:center;padding:.38rem 0;border-bottom:1px solid var(--light);font-size:.81rem;gap:.5rem}
+    .week-row:last-child{border-bottom:none}
+    .week-label{color:var(--gray);font-weight:500;flex:1}
+    .week-days{color:var(--gray);font-size:.72rem;white-space:nowrap}
+    .week-h{font-weight:700}
+    .wh-ok{color:var(--green)}.wh-over{color:var(--red)}.wh-low{color:#C0710A}
+
+    /* ── ADMIN ── */
+    .admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+    .admin-card{background:#fff;border-radius:10px;padding:1.2rem;border:1.5px solid var(--light)}
+    .admin-card h3{font-size:.87rem;font-weight:700;color:var(--navy);margin-bottom:.8rem;padding-bottom:.5rem;border-bottom:1px solid var(--light)}
+    .emp-list-item{display:flex;align-items:center;justify-content:space-between;padding:.48rem 0;border-bottom:1px solid var(--light);font-size:.81rem;gap:.5rem}
+    .emp-list-item:last-child{border-bottom:none}
+    .emp-info{display:flex;align-items:center;gap:.55rem}
+    .mini-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;color:#fff;flex-shrink:0}
+    .btn-del{background:#FEE2E2;color:var(--red);border:none;border-radius:4px;padding:.2rem .5rem;font-size:.7rem;cursor:pointer;font-weight:600;white-space:nowrap}
+    .form-row{display:flex;flex-direction:column;gap:.4rem;margin-bottom:.7rem}
+    .form-row label{font-size:.73rem;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.5px}
+    .form-row input,.form-row select{border:1.5px solid var(--light);border-radius:6px;padding:.48rem .7rem;font-size:.84rem;color:var(--dark);width:100%;background:#fff}
+    .form-row input:focus,.form-row select:focus{outline:none;border-color:var(--gold)}
+    .btn-add{width:100%;background:var(--navy);color:#fff;border:none;border-radius:6px;padding:.6rem;font-size:.82rem;font-weight:700;cursor:pointer;transition:background .2s;margin-top:.2rem}
+    .btn-add:hover{background:var(--gold);color:var(--navy)}
+
+    /* ── TOAST ── */
+    .toast{position:fixed;top:1rem;right:1rem;padding:.75rem 1.2rem;border-radius:8px;font-weight:700;font-size:.86rem;z-index:9999;transform:translateY(-100px);transition:transform .3s;box-shadow:0 4px 18px rgba(0,0,0,.18);max-width:320px}
+    .toast.show{transform:translateY(0)}
+    .t-success{background:var(--green);color:#fff}
+    .t-error{background:var(--red);color:#fff}
+    .t-info{background:var(--navy);color:#fff}
+
+    @media(max-width:600px){
+      .admin-grid{grid-template-columns:1fr}
+      .emp-grid{grid-template-columns:repeat(2,1fr)}
+      .nav-tabs .tab{padding:.45rem .55rem;font-size:.7rem}
+      .clock-time{font-size:2.2rem}
+    }
+  </style>
 </head>
 <body>
-    <header>
-        <h1>Pointeuse Jacques</h1>
-    </header>
 
-    <main>
-        <p>Bienvenue sur mon site de pointage !</p>
-    </main>
+<nav>
+  <div class="nav-logo">
+    <svg width="36" height="36" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="48" fill="#0D1B2A"/>
+      <circle cx="50" cy="50" r="48" fill="none" stroke="#C8A84B" stroke-width="3"/>
+      <clipPath id="lnav"><circle cx="50" cy="50" r="44"/></clipPath>
+      <rect x="5" y="5" width="30" height="90" fill="#002395" clip-path="url(#lnav)" opacity="0.3"/>
+      <rect x="35" y="5" width="15" height="90" fill="#fff" clip-path="url(#lnav)" opacity="0.1"/>
+      <rect x="50" y="5" width="45" height="90" fill="#ED2939" clip-path="url(#lnav)" opacity="0.2"/>
+      <polygon points="50,22 54,34 66,34 57,41 60,53 50,46 40,53 43,41 34,34 46,34" fill="none" stroke="#C8A84B" stroke-width="1.5"/>
+      <text x="50" y="74" text-anchor="middle" font-family="Georgia,serif" font-size="20" font-weight="700" fill="#fff">JACQUES</text>
+    </svg>
+    <div><span class="brand">POINTEUSE</span><span class="brand-sub">BOULANGERIE DES FORGES</span></div>
+  </div>
+  <div class="nav-tabs">
+    <button class="tab active" onclick="showPage('pointer',this)">⏱ Pointer</button>
+    <button class="tab" onclick="showPage('dashboard',this)">📊 Dashboard</button>
+    <button class="tab" onclick="showPage('recap',this)">📅 Récap</button>
+    <button class="tab" onclick="showPage('admin',this)">⚙️ Admin</button>
+  </div>
+  <div class="nav-time" id="navTime">--:--</div>
+</nav>
 
-    <footer>
-        <p>&copy; 2026 - Pointeuse Jacques</p>
-    </footer>
+<div class="toast" id="toast"></div>
+
+<!-- ══════════ PAGE POINTER ══════════ -->
+<div class="page active" id="page-pointer">
+  <div class="clock-header">
+    <div class="clock-date" id="clockDate"></div>
+    <div class="clock-time" id="clockTime">--:--:--</div>
+  </div>
+  <div id="empSelect">
+    <p style="font-size:.83rem;color:var(--gray);margin-bottom:.8rem;font-weight:600;letter-spacing:.5px;text-transform:uppercase">Sélectionnez votre nom :</p>
+    <div class="emp-grid" id="empGrid"></div>
+  </div>
+  <div class="pin-panel" id="pinPanel" style="display:none">
+    <div class="pin-title" id="pinTitle"></div>
+    <div class="pin-sub" id="pinSub"></div>
+    <div class="pin-display" id="pinDisplay">_ _ _ _</div>
+    <div class="pin-grid">
+      <button class="pin-key" onclick="pk('1')">1</button>
+      <button class="pin-key" onclick="pk('2')">2</button>
+      <button class="pin-key" onclick="pk('3')">3</button>
+      <button class="pin-key" onclick="pk('4')">4</button>
+      <button class="pin-key" onclick="pk('5')">5</button>
+      <button class="pin-key" onclick="pk('6')">6</button>
+      <button class="pin-key" onclick="pk('7')">7</button>
+      <button class="pin-key" onclick="pk('8')">8</button>
+      <button class="pin-key" onclick="pk('9')">9</button>
+      <button class="pin-key pin-del" onclick="pdel()">⌫</button>
+      <button class="pin-key" onclick="pk('0')">0</button>
+      <button class="pin-key pin-del" onclick="pclr()">C</button>
+    </div>
+    <button class="btn-confirm" id="btnConfirm" onclick="confirmPin()" disabled>VALIDER</button>
+    <button class="btn-cancel" onclick="cancelPin()">← Retour</button>
+  </div>
+</div>
+
+<!-- ══════════ PAGE DASHBOARD ══════════ -->
+<div class="page" id="page-dashboard">
+  <div class="dash-header">
+    <div class="dash-title">📊 Tableau de bord</div>
+    <div class="dash-controls">
+      <select class="sel" id="dashEmp" onchange="renderDash()"><option value="all">Tous les salariés</option></select>
+      <select class="sel" id="dashPeriod" onchange="renderDash()">
+        <option value="today">Aujourd'hui</option>
+        <option value="week">Cette semaine</option>
+        <option value="month" selected>Ce mois</option>
+      </select>
+      <button class="btn-sm btn-navy" onclick="exportCSV()">⬇ Export CSV</button>
+    </div>
+  </div>
+  <div class="stats-row" id="statsRow"></div>
+  <div class="table-wrap">
+    <table><thead><tr><th>Salarié</th><th>Date</th><th>Arrivée</th><th>Départ</th><th>Durée</th><th>Statut</th></tr></thead>
+    <tbody id="dashTbody"></tbody></table>
+  </div>
+</div>
+
+<!-- ══════════ PAGE RECAP ══════════ -->
+<div class="page" id="page-recap">
+  <div class="dash-header">
+    <div class="dash-title">📅 Récapitulatif mensuel</div>
+    <div class="dash-controls">
+      <select class="sel" id="recapMonth" onchange="renderRecap()"></select>
+      <button class="btn-sm btn-navy" onclick="exportCSV()">⬇ CSV</button>
+      <button class="btn-sm btn-green" onclick="sendEmail()">✉ Email gérant</button>
+      <button class="btn-sm btn-navy" onclick="window.print()">🖨 Imprimer</button>
+    </div>
+  </div>
+  <div id="recapContent"></div>
+</div>
+
+<!-- ══════════ PAGE ADMIN ══════════ -->
+<div class="page" id="page-admin">
+  <div class="dash-header"><div class="dash-title">⚙️ Administration</div></div>
+  <div class="admin-grid">
+    <div class="admin-card">
+      <h3>👥 Salariés</h3>
+      <div id="adminList"></div>
+    </div>
+    <div class="admin-card">
+      <h3>➕ Ajouter un salarié</h3>
+      <div class="form-row"><label>Prénom Nom</label><input type="text" id="nName" placeholder="Ex: Marie Dupont"/></div>
+      <div class="form-row"><label>Code PIN (4 chiffres)</label><input type="password" id="nPin" maxlength="4" placeholder="••••"/></div>
+      <div class="form-row"><label>Site</label>
+        <select id="nSite"><option value="Site 1">Site 1</option><option value="Site 2">Site 2</option></select>
+      </div>
+      <button class="btn-add" onclick="addEmp()">Ajouter</button>
+    </div>
+    <div class="admin-card" style="grid-column:1/-1">
+      <h3>⚙️ Paramètres</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+        <div class="form-row"><label>Email récapitulatif</label><input type="email" id="sEmail" value="gerant@boulangerie-desforges.fr"/></div>
+        <div class="form-row"><label>Heures légales / semaine</label><input type="number" id="sHours" value="35" min="1" max="60"/></div>
+      </div>
+      <button class="btn-add" style="max-width:180px" onclick="saveSettings()">💾 Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  DONNÉES & ÉTAT
+// ══════════════════════════════════════════
+const COLORS=['#002395','#1A7A4A','#C0710A','#6B21A8','#0369A1','#B91C1C','#0D5E5E','#7C4010'];
+
+// Charge depuis localStorage ou données par défaut
+function load(key,def){try{const v=localStorage.getItem(key);return v?JSON.parse(v):def;}catch{return def;}}
+function save(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch{}}
+
+let employees = load('jq_employees',[
+  {id:1,name:'Sophie Martin',pin:'1234',site:'Site 1',color:COLORS[0]},
+  {id:2,name:'Lucas Bernard',pin:'2345',site:'Site 1',color:COLORS[1]},
+  {id:3,name:'Emma Leroy',pin:'3456',site:'Site 2',color:COLORS[2]},
+  {id:4,name:'Thomas Dubois',pin:'4567',site:'Site 2',color:COLORS[3]},
+  {id:5,name:'Chloé Moreau',pin:'5678',site:'Site 1',color:COLORS[4]},
+]);
+
+let pointages  = load('jq_pointages', genDemo());
+let sessions   = load('jq_sessions', {});   // {empId: {arrivee, date}}
+let settings   = load('jq_settings', {email:'gerant@boulangerie-desforges.fr', heures:35});
+
+let selEmp=null, pinBuf='';
+
+// ──────────────────────────────────────────
+//  DÉMO : génère des pointages du mois
+// ──────────────────────────────────────────
+function genDemo(){
+  const now=new Date(), y=now.getFullYear(), m=now.getMonth();
+  const days=new Date(y,m+1,0).getDate();
+  const list=[];
+  const emps=[
+    {id:1},{id:2},{id:3},{id:4},{id:5}
+  ];
+  emps.forEach(emp=>{
+    for(let d=1;d<=Math.min(days,now.getDate()-1);d++){
+      const day=new Date(y,m,d);
+      if(day.getDay()===0||day.getDay()===6) continue;
+      if(Math.random()<0.08) continue;
+      const hStart=5+Math.floor(Math.random()*2);
+      const mStart=Math.floor(Math.random()*60);
+      const dur=7+Math.random()*2;
+      const totalStart=hStart*60+mStart;
+      const totalEnd=totalStart+Math.round(dur*60);
+      const pad=n=>String(n).padStart(2,'0');
+      list.push({
+        id:Date.now()+Math.random(),
+        empId:emp.id,
+        date:`${y}-${pad(m+1)}-${pad(d)}`,
+        arrivee:`${pad(Math.floor(totalStart/60))}:${pad(totalStart%60)}`,
+        depart:`${pad(Math.floor(totalEnd/60))}:${pad(totalEnd%60)}`,
+        duree:+dur.toFixed(2)
+      });
+    }
+  });
+  return list;
+}
+
+// ══════════════════════════════════════════
+//  HORLOGE
+// ══════════════════════════════════════════
+function tick(){
+  const now=new Date();
+  const t=now.toLocaleTimeString('fr-FR');
+  const d=now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('clockTime').textContent=t;
+  document.getElementById('clockDate').textContent=d.charAt(0).toUpperCase()+d.slice(1);
+  document.getElementById('navTime').textContent=now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+}
+setInterval(tick,1000); tick();
+
+// ══════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════
+function showPage(id, btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if(btn) btn.classList.add('active');
+  if(id==='dashboard') renderDash();
+  if(id==='recap') renderRecap();
+  if(id==='admin') renderAdmin();
+}
+
+// ══════════════════════════════════════════
+//  GRILLE EMPLOYÉS
+// ══════════════════════════════════════════
+function renderEmpGrid(){
+  const g=document.getElementById('empGrid');
+  g.innerHTML='';
+  employees.forEach(emp=>{
+    const isIn=!!sessions[emp.id];
+    const initials=emp.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+    const div=document.createElement('div');
+    div.className='emp-btn'+(selEmp?.id===emp.id?' selected':'');
+    div.innerHTML=`
+      <div class="emp-avatar" style="background:${emp.color}">${initials}</div>
+      <div class="emp-name">${emp.name}</div>
+      <div class="emp-site">${emp.site}</div>
+      <span class="emp-status ${isIn?'status-in':'status-out'}">${isIn?'✓ Présent':'● Absent'}</span>`;
+    div.onclick=()=>selectEmp(emp);
+    g.appendChild(div);
+  });
+}
+renderEmpGrid();
+
+// ══════════════════════════════════════════
+//  SÉLECTION & PIN
+// ══════════════════════════════════════════
+function selectEmp(emp){
+  selEmp=emp; pinBuf='';
+  const isIn=!!sessions[emp.id];
+  document.getElementById('pinTitle').textContent=emp.name;
+  document.getElementById('pinSub').textContent=isIn
+    ? '⬅️ Enregistrez votre DÉPART'
+    : '➡️ Enregistrez votre ARRIVÉE';
+  document.getElementById('pinDisplay').textContent='_ _ _ _';
+  const btn=document.getElementById('btnConfirm');
+  btn.textContent=isIn?'ENREGISTRER MON DÉPART':'ENREGISTRER MON ARRIVÉE';
+  btn.style.background=isIn?'var(--red)':'var(--gold)';
+  btn.style.color=isIn?'#fff':'var(--navy)';
+  btn.disabled=true;
+  document.getElementById('empSelect').style.display='none';
+  document.getElementById('pinPanel').style.display='block';
+}
+function cancelPin(){
+  selEmp=null; pinBuf='';
+  document.getElementById('empSelect').style.display='block';
+  document.getElementById('pinPanel').style.display='none';
+  renderEmpGrid();
+}
+function pk(k){
+  if(pinBuf.length>=4) return;
+  pinBuf+=k;
+  document.getElementById('pinDisplay').textContent=
+    '● '.repeat(pinBuf.length)+'_ '.repeat(4-pinBuf.length);
+  document.getElementById('btnConfirm').disabled=pinBuf.length<4;
+}
+function pdel(){
+  pinBuf=pinBuf.slice(0,-1);
+  document.getElementById('pinDisplay').textContent=
+    '● '.repeat(pinBuf.length)+'_ '.repeat(4-pinBuf.length);
+  document.getElementById('btnConfirm').disabled=true;
+}
+function pclr(){
+  pinBuf='';
+  document.getElementById('pinDisplay').textContent='_ _ _ _';
+  document.getElementById('btnConfirm').disabled=true;
+}
+
+function confirmPin(){
+  if(!selEmp) return;
+  if(pinBuf!==selEmp.pin){ toast('❌ Code PIN incorrect','t-error'); pclr(); return; }
+  const now=new Date();
+  const pad=n=>String(n).padStart(2,'0');
+  const time=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const date=now.toISOString().split('T')[0];
+  const isIn=!!sessions[selEmp.id];
+
+  if(!isIn){
+    sessions[selEmp.id]={arrivee:time,date};
+    save('jq_sessions',sessions);
+    toast(`✅ Arrivée ${selEmp.name} — ${time}`,'t-success');
+  } else {
+    const sess=sessions[selEmp.id];
+    const [ah,am]=sess.arrivee.split(':').map(Number);
+    const [dh,dm]=time.split(':').map(Number);
+    let dur=((dh*60+dm)-(ah*60+am))/60;
+    if(dur<0) dur+=24;
+    const entry={id:Date.now(),empId:selEmp.id,date:sess.date,arrivee:sess.arrivee,depart:time,duree:+dur.toFixed(2)};
+    pointages.push(entry);
+    delete sessions[selEmp.id];
+    save('jq_pointages',pointages);
+    save('jq_sessions',sessions);
+    toast(`✅ Départ ${selEmp.name} — ${time} (${dur.toFixed(1)}h)`,'t-success');
+  }
+  cancelPin();
+}
+
+// ══════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════
+function toast(msg,cls='t-info'){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className=`toast ${cls} show`;
+  setTimeout(()=>el.classList.remove('show'),3500);
+}
+
+// ══════════════════════════════════════════
+//  DASHBOARD
+// ══════════════════════════════════════════
+function renderDash(){
+  const empF=document.getElementById('dashEmp').value;
+  const period=document.getElementById('dashPeriod').value;
+  const now=new Date();
+  const today=now.toISOString().split('T')[0];
+
+  // Populate dropdown once
+  const sel=document.getElementById('dashEmp');
+  if(sel.options.length===1){
+    employees.forEach(e=>{
+      const o=new Option(e.name,e.id);
+      sel.appendChild(o);
+    });
+  }
+
+  let data=pointages.filter(p=>{
+    if(empF!=='all' && String(p.empId)!==String(empF)) return false;
+    const d=new Date(p.date+'T12:00:00');
+    if(period==='today') return p.date===today;
+    if(period==='week'){
+      const ws=new Date(now); ws.setDate(now.getDate()-((now.getDay()+6)%7));
+      ws.setHours(0,0,0,0);
+      const we=new Date(ws); we.setDate(ws.getDate()+6); we.setHours(23,59,59);
+      return d>=ws && d<=we;
+    }
+    return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
+  });
+
+  const totalH=data.reduce((a,p)=>a+p.duree,0);
+  const empSet=new Set(data.map(p=>p.empId));
+  const moy=empSet.size>0?(totalH/empSet.size).toFixed(1):0;
+
+  document.getElementById('statsRow').innerHTML=`
+    <div class="stat-card"><div class="stat-label">Heures totales</div><div class="stat-val">${totalH.toFixed(1)}h</div><div class="stat-sub">${data.length} pointages</div></div>
+    <div class="stat-card"><div class="stat-label">Salariés actifs</div><div class="stat-val">${empSet.size}</div><div class="stat-sub">sur ${employees.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Moyenne / salarié</div><div class="stat-val">${moy}h</div><div class="stat-sub">sur la période</div></div>
+    <div class="stat-card"><div class="stat-label">En service</div><div class="stat-val">${Object.keys(sessions).length}</div><div class="stat-sub">présents actuellement</div></div>`;
+
+  const tbody=document.getElementById('dashTbody');
+  tbody.innerHTML='';
+  [...data].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,60).forEach(p=>{
+    const emp=employees.find(e=>e.id===p.empId)||{name:'?',site:''};
+    const dd=new Date(p.date+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+    const cls=p.duree>10?'b-red':p.duree>=7?'b-green':'b-gold';
+    const lbl=p.duree>10?'Heure sup.':p.duree>=7?'Normal':'Court';
+    tbody.innerHTML+=`<tr>
+      <td><strong>${emp.name}</strong><br><span style="font-size:.7rem;color:var(--gray)">${emp.site}</span></td>
+      <td>${dd}</td><td>${p.arrivee}</td><td>${p.depart||'—'}</td>
+      <td><strong>${p.duree.toFixed(1)}h</strong></td>
+      <td><span class="badge ${cls}">${lbl}</span></td></tr>`;
+  });
+  if(!data.length) tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--gray)">Aucun pointage sur cette période</td></tr>';
+}
+
+// ══════════════════════════════════════════
+//  RÉCAP MENSUEL
+// ══════════════════════════════════════════
+function initMonths(){
+  const sel=document.getElementById('recapMonth');
+  const now=new Date();
+  for(let i=0;i<6;i++){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    const val=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const lbl=d.toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+    const o=new Option(lbl.charAt(0).toUpperCase()+lbl.slice(1),val);
+    if(i===0) o.selected=true;
+    sel.appendChild(o);
+  }
+}
+initMonths();
+
+function weekNum(dateStr){
+  const d=new Date(dateStr+'T12:00:00');
+  const jan1=new Date(d.getFullYear(),0,1);
+  return Math.ceil(((d-jan1)/86400000+jan1.getDay()+1)/7);
+}
+function weekLabel(dateStr){
+  const d=new Date(dateStr+'T12:00:00');
+  const mon=new Date(d); mon.setDate(d.getDate()-((d.getDay()+6)%7));
+  const fri=new Date(mon); fri.setDate(mon.getDate()+4);
+  const fmt=dt=>dt.toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+  return `Sem. ${weekNum(dateStr)} — ${fmt(mon)} au ${fmt(fri)}`;
+}
+
+function renderRecap(){
+  const val=document.getElementById('recapMonth').value;
+  const [y,m]=val.split('-').map(Number);
+  const data=pointages.filter(p=>{
+    const d=new Date(p.date+'T12:00:00');
+    return d.getFullYear()===y && d.getMonth()===m-1;
+  });
+
+  const container=document.getElementById('recapContent');
+  if(!data.length){
+    container.innerHTML='<div style="text-align:center;padding:3rem;color:var(--gray)">Aucun pointage ce mois-ci</div>';
+    return;
+  }
+
+  let html='';
+  employees.forEach(emp=>{
+    const eps=data.filter(p=>p.empId===emp.id);
+    if(!eps.length) return;
+    const totalH=eps.reduce((a,p)=>a+p.duree,0);
+    const initials=emp.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+    const legal=settings.heures||35;
+    const diffH=totalH-legal*4.33;
+
+    const byWeek={};
+    eps.forEach(p=>{
+      const w=weekNum(p.date);
+      if(!byWeek[w]) byWeek[w]={h:0,days:0,label:weekLabel(p.date)};
+      byWeek[w].h+=p.duree; byWeek[w].days++;
+    });
+
+    html+=`<div class="recap-emp">
+      <div class="recap-head">
+        <div class="recap-name">
+          <div style="width:32px;height:32px;border-radius:50%;background:${emp.color};display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:#fff;flex-shrink:0">${initials}</div>
+          ${emp.name}
+          <span style="color:#94A3B8;font-size:.73rem;font-weight:400">${emp.site}</span>
+        </div>
+        <div class="recap-total">
+          ${totalH.toFixed(1)}h
+          <div style="font-size:.68rem;color:${diffH>=0?'#86EFAC':'#FCA5A5'};margin-top:.1rem">${diffH>=0?'+':''}${diffH.toFixed(1)}h vs base ${legal}h</div>
+        </div>
+      </div>
+      <div class="recap-weeks">
+        ${Object.entries(byWeek).sort((a,b)=>+a[0]-+b[0]).map(([,w])=>`
+          <div class="week-row">
+            <span class="week-label">${w.label}</span>
+            <span class="week-days">${w.days}j</span>
+            <span class="week-h ${w.h>legal?'wh-over':w.h>=legal*.9?'wh-ok':'wh-low'}">${w.h.toFixed(1)}h</span>
+          </div>`).join('')}
+        <div class="week-row" style="border-top:2px solid var(--navy);margin-top:.4rem;padding-top:.5rem;font-weight:700">
+          <span style="color:var(--navy)">TOTAL MENSUEL</span><span></span>
+          <span style="color:var(--navy);font-size:.95rem">${totalH.toFixed(1)}h</span>
+        </div>
+      </div>
+    </div>`;
+  });
+  container.innerHTML=html;
+}
+
+// ══════════════════════════════════════════
+//  EXPORT CSV
+// ══════════════════════════════════════════
+function exportCSV(){
+  let csv='\uFEFFSalarié;Site;Date;Arrivée;Départ;Durée (h)\n';
+  [...pointages].sort((a,b)=>a.date.localeCompare(b.date)).forEach(p=>{
+    const emp=employees.find(e=>e.id===p.empId);
+    if(!emp) return;
+    csv+=`${emp.name};${emp.site};${p.date};${p.arrivee};${p.depart||''};${p.duree.toFixed(2)}\n`;
+  });
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`pointages_${new Date().toISOString().split('T')[0]}.csv`});
+  a.click();
+  toast('✅ Export CSV téléchargé','t-success');
+}
+
+// ══════════════════════════════════════════
+//  EMAIL (ouverture client mail)
+// ══════════════════════════════════════════
+function sendEmail(){
+  const val=document.getElementById('recapMonth').value;
+  const [y,m]=val.split('-').map(Number);
+  const moisLabel=new Date(y,m-1,1).toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+  const data=pointages.filter(p=>{const d=new Date(p.date+'T12:00:00');return d.getFullYear()===y&&d.getMonth()===m-1;});
+
+  let body=`Récapitulatif des heures — ${moisLabel}\nBoulangerie des Forges\n\n`;
+  employees.forEach(emp=>{
+    const eps=data.filter(p=>p.empId===emp.id);
+    if(!eps.length) return;
+    const total=eps.reduce((a,p)=>a+p.duree,0);
+    body+=`${emp.name} (${emp.site}) : ${total.toFixed(1)}h\n`;
+    const byWeek={};
+    eps.forEach(p=>{const w=weekNum(p.date);if(!byWeek[w])byWeek[w]=0;byWeek[w]+=p.duree;});
+    Object.entries(byWeek).sort((a,b)=>+a[0]-+b[0]).forEach(([w,h])=>body+=`  Semaine ${w} : ${h.toFixed(1)}h\n`);
+    body+='\n';
+  });
+
+  const subject=encodeURIComponent(`Récapitulatif heures — ${moisLabel} — Boulangerie des Forges`);
+  const bodyEnc=encodeURIComponent(body);
+  const email=settings.email||'gerant@boulangerie-desforges.fr';
+  window.location.href=`mailto:${email}?subject=${subject}&body=${bodyEnc}`;
+  toast(`📧 Email préparé pour ${email}`,'t-info');
+}
+
+// ══════════════════════════════════════════
+//  ADMIN
+// ══════════════════════════════════════════
+function renderAdmin(){
+  const list=document.getElementById('adminList');
+  list.innerHTML='';
+  if(!employees.length){list.innerHTML='<p style="color:var(--gray);font-size:.82rem">Aucun salarié</p>';return;}
+  employees.forEach(emp=>{
+    const ini=emp.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+    list.innerHTML+=`<div class="emp-list-item">
+      <div class="emp-info">
+        <div class="mini-av" style="background:${emp.color}">${ini}</div>
+        <div>
+          <div style="font-weight:700;font-size:.82rem">${emp.name}</div>
+          <div style="font-size:.7rem;color:var(--gray)">${emp.site} · PIN : ••••</div>
+        </div>
+      </div>
+      <button class="btn-del" onclick="delEmp(${emp.id})">✕ Supprimer</button>
+    </div>`;
+  });
+  document.getElementById('sEmail').value=settings.email||'';
+  document.getElementById('sHours').value=settings.heures||35;
+}
+
+function addEmp(){
+  const name=document.getElementById('nName').value.trim();
+  const pin=document.getElementById('nPin').value.trim();
+  const site=document.getElementById('nSite').value;
+  if(!name){toast('❌ Nom requis','t-error');return;}
+  if(!/^\d{4}$/.test(pin)){toast('❌ PIN : 4 chiffres exactement','t-error');return;}
+  if(employees.some(e=>e.pin===pin)){toast('❌ Ce PIN est déjà utilisé','t-error');return;}
+  const emp={id:Date.now(),name,pin,site,color:COLORS[employees.length%COLORS.length]};
+  employees.push(emp);
+  save('jq_employees',employees);
+  document.getElementById('nName').value='';
+  document.getElementById('nPin').value='';
+  renderAdmin(); renderEmpGrid();
+  toast(`✅ ${name} ajouté(e)`,'t-success');
+}
+
+function delEmp(id){
+  if(!confirm('Supprimer ce salarié ?')) return;
+  employees=employees.filter(e=>e.id!==id);
+  delete sessions[id];
+  save('jq_employees',employees);
+  save('jq_sessions',sessions);
+  renderAdmin(); renderEmpGrid();
+  toast('Salarié supprimé','t-info');
+}
+
+function saveSettings(){
+  settings.email=document.getElementById('sEmail').value.trim();
+  settings.heures=+document.getElementById('sHours').value||35;
+  save('jq_settings',settings);
+  toast('✅ Paramètres enregistrés','t-success');
+}
+</script>
 </body>
 </html>
