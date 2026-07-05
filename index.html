@@ -934,10 +934,36 @@ function addConge(){
   document.getElementById('cPin').value='';
   document.getElementById('cStart').value='';
   document.getElementById('cEnd').value='';
-  if(status==='attente') toast(`✅ Demande envoyée pour ${emp.name} — en attente de validation par le gérant`,'t-success');
-  else toast(`✅ ${type} enregistré et validé pour ${emp.name}`,'t-success');
+  if(status==='attente'){
+    toast(`✅ Demande envoyée pour ${emp.name} — en attente de validation par le gérant`,'t-success');
+    notifyManagerNewConge(emp, conges[conges.length-1]);
+  } else {
+    toast(`✅ ${type} enregistré et validé pour ${emp.name}`,'t-success');
+  }
   renderCongesCalendar();
   updatePendingBadge();
+}
+
+// Envoie un email au gérant pour le prévenir dès qu'un salarié dépose une nouvelle demande de congé
+// (quel que soit le type : congés payés, absence non rémunérée, repos compensateur...)
+function notifyManagerNewConge(emp, conge){
+  if(!emp) return;
+  const periode=conge.start===conge.end
+    ? new Date(conge.start+'T12:00:00').toLocaleDateString('fr-FR')
+    : `du ${new Date(conge.start+'T12:00:00').toLocaleDateString('fr-FR')} au ${new Date(conge.end+'T12:00:00').toLocaleDateString('fr-FR')}`;
+  const subject=`🔔 Nouvelle demande de congé — ${emp.name}`;
+  const message=`Bonjour,\n\n${emp.name} (${emp.site}) vient de déposer une demande de type "${conge.type}" ${periode}.\n\nRendez-vous dans l'onglet "✅ Valider congés" de la pointeuse pour l'approuver ou la refuser.`;
+  const email=settings.email||'gerant@boulangerie-desforges.fr';
+
+  emailjs.send('service_i0lfwfg','template_s58kq34',{
+    to_email: email,
+    subject: subject,
+    message: message
+  }).then(()=>{
+    console.log('Notification de nouvelle demande de congé envoyée au gérant');
+  }).catch(err=>{
+    console.error('Erreur envoi notification gérant (nouvelle demande) :', err);
+  });
 }
 
 // Envoie un email au salarié pour l'informer de la décision sur sa demande de congé
