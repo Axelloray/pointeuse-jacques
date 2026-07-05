@@ -345,7 +345,7 @@
     <div class="dash-title">📅 Récapitulatif mensuel</div>
     <div class="dash-controls">
       <select class="sel" id="recapMonth" onchange="renderRecap()"></select>
-      <button class="btn-sm btn-navy" onclick="exportCSV()">⬇ CSV</button>
+      <button class="btn-sm btn-navy" onclick="exportRecapCSV()">⬇ CSV détaillé (jour par jour)</button>
       <button class="btn-sm btn-green" onclick="sendEmail()">✉ Email gérant</button>
       <button class="btn-sm btn-navy" onclick="window.print()">🖨 Imprimer</button>
     </div>
@@ -1281,6 +1281,18 @@ function weekLabel(dateStr){
   return `Sem. ${weekNum(dateStr)} — ${fmt(mon)} au ${fmt(fri)}`;
 }
 
+// Calcule le nombre de jours d'un congé (start→end) qui tombent dans le mois (y, m 1-based)
+function joursCongeDansMois(start,end,y,m){
+  const monthStart=new Date(y,m-1,1);
+  const monthEnd=new Date(y,m,0);
+  const cStart=new Date(start+'T00:00:00');
+  const cEnd=new Date(end+'T00:00:00');
+  const os=cStart>monthStart?cStart:monthStart;
+  const oe=cEnd<monthEnd?cEnd:monthEnd;
+  if(oe<os) return 0;
+  return Math.round((oe-os)/86400000)+1;
+}
+
 function renderRecap(){
   const val=document.getElementById('recapMonth').value;
   const [y,m]=val.split('-').map(Number);
@@ -1289,16 +1301,22 @@ function renderRecap(){
     return d.getFullYear()===y && d.getMonth()===m-1;
   });
 
+  // Congés validés qui chevauchent ce mois (au moins un jour dedans)
+  const congesThisMonth=conges.filter(c=>c.status==='validee' && joursCongeDansMois(c.start,c.end,y,m)>0);
+
   const container=document.getElementById('recapContent');
-  if(!data.length){
-    container.innerHTML='<div style="text-align:center;padding:3rem;color:var(--gray)">Aucun pointage ce mois-ci</div>';
+  const empsAvecActivite=employees.filter(emp=>
+    data.some(p=>p.empId===emp.id) || congesThisMonth.some(c=>c.empId===emp.id)
+  );
+
+  if(!empsAvecActivite.length){
+    container.innerHTML='<div style="text-align:center;padding:3rem;color:var(--gray)">Aucune activité ce mois-ci</div>';
     return;
   }
 
   let html='';
-  employees.forEach(emp=>{
+  empsAvecActivite.forEach(emp=>{
     const eps=data.filter(p=>p.empId===emp.id);
-    if(!eps.length) return;
     const totalH=eps.reduce((a,p)=>a+p.duree,0);
     const initials=emp.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
     const legal=settings.heures||35;
@@ -1310,6 +1328,15 @@ function renderRecap(){
       if(!byWeek[w]) byWeek[w]={h:0,days:0,label:weekLabel(p.date)};
       byWeek[w].h+=p.duree; byWeek[w].days++;
     });
+
+    // Totaux de congés/absences du salarié pour ce mois, par type
+    const congesTotals={};
+    congesThisMonth.filter(c=>c.empId===emp.id).forEach(c=>{
+      congesTotals[c.type]=(congesTotals[c.type]||0)+joursCongeDansMois(c.start,c.end,y,m);
+    });
+    const congesHtml=Object.entries(congesTotals).map(([t,j])=>
+      `<span class="badge b-gold" style="margin-right:.35rem;margin-bottom:.3rem;display:inline-block">${t} : ${j}j</span>`
+    ).join('');
 
     html+=`<div class="recap-emp">
       <div class="recap-head">
@@ -1330,10 +1357,14 @@ function renderRecap(){
             <span class="week-days">${w.days}j</span>
             <span class="week-h ${w.h>legal?'wh-over':w.h>=legal*.9?'wh-ok':'wh-low'}">${w.h.toFixed(1)}h</span>
           </div>`).join('')}
-        <div class="week-row" style="border-top:2px solid var(--navy);margin-top:.4rem;padding-top:.5rem;font-weight:700">
+        ${eps.length?`<div class="week-row" style="border-top:2px solid var(--navy);margin-top:.4rem;padding-top:.5rem;font-weight:700">
           <span style="color:var(--navy)">TOTAL MENSUEL</span><span></span>
           <span style="color:var(--navy);font-size:.95rem">${totalH.toFixed(1)}h</span>
-        </div>
+        </div>`:''}
+        ${congesHtml?`<div style="border-top:1px dashed var(--light);margin-top:.6rem;padding-top:.6rem">
+          <div style="font-size:.7rem;color:var(--gray);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:.35rem">🏖 Congés & absences ce mois</div>
+          ${congesHtml}
+        </div>`:''}
       </div>
     </div>`;
   });
@@ -1354,6 +1385,63 @@ function exportCSV(){
   const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`pointages_${new Date().toISOString().split('T')[0]}.csv`});
   a.click();
   toast('✅ Export CSV téléchargé','t-success');
+}
+
+// Export CSV du récap mensuel : un tableau par salarié, jour par jour (du 1er au dernier jour du mois),
+// avec ce qui a été pointé ce jour-là ou le motif d'absence (congé, repos habituel, absence non justifiée).
+function exportRecapCSV(){
+  const val=document.getElementById('recapMonth').value;
+  const [y,m]=val.split('-').map(Number); // m est 1-based (01-12)
+  const daysInMonth=new Date(y,m,0).getDate();
+  const pad=n=>String(n).padStart(2,'0');
+  const moisPrefix=`${y}-${pad(m)}`;
+
+  let csv='\uFEFF';
+
+  employees.forEach(emp=>{
+    const empPointages=pointages.filter(p=>p.empId===emp.id && p.date.startsWith(moisPrefix));
+    const empConges=conges.filter(c=>c.empId===emp.id && c.status==='validee' && joursCongeDansMois(c.start,c.end,y,m)>0);
+    if(!empPointages.length && !empConges.length) return; // salarié sans aucune activité ce mois-ci : on l'ignore
+
+    csv+=`${emp.name};${emp.site}\n`;
+    csv+='Date;Jour;Arrivée;Pause;Départ;Durée nette (h);Statut\n';
+
+    let totalH=0;
+    for(let d=1; d<=daysInMonth; d++){
+      const dateStr=`${y}-${pad(m)}-${pad(d)}`;
+      const dateObj=new Date(dateStr+'T12:00:00');
+      const jourLbl=dateObj.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+      const weekday=dateObj.getDay();
+
+      const dayPointages=empPointages.filter(p=>p.date===dateStr);
+      const dayConge=empConges.find(c=>dateStr>=c.start && dateStr<=c.end);
+      const reposHabituel=(emp.repos||[]).includes(weekday);
+
+      let arrivee='', pause='', depart='', duree='', statut='';
+      if(dayPointages.length){
+        const dureeJour=dayPointages.reduce((a,p)=>a+p.duree,0);
+        arrivee=dayPointages.map(p=>p.arrivee).join(' / ');
+        depart=dayPointages.map(p=>p.depart||'').join(' / ');
+        pause=dayPointages.map(p=>(p.pauseDebut&&p.pauseFin)?`${p.pauseDebut}-${p.pauseFin}`:'').filter(Boolean).join(' / ');
+        duree=dureeJour.toFixed(2);
+        totalH+=dureeJour;
+        statut='Travaillé';
+      } else if(dayConge){
+        statut=dayConge.type;
+      } else if(reposHabituel){
+        statut='Repos habituel';
+      } else {
+        statut='Absence non justifiée';
+      }
+      csv+=`${dateStr};${jourLbl};${arrivee};${pause};${depart};${duree};${statut}\n`;
+    }
+    csv+=`;;;;TOTAL;${totalH.toFixed(2)};\n\n`;
+  });
+
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`recap_detaille_${y}-${pad(m)}.csv`});
+  a.click();
+  toast('✅ Récapitulatif détaillé exporté','t-success');
 }
 
 // ══════════════════════════════════════════
