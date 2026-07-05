@@ -310,8 +310,8 @@
     <div class="form-row"><label>Date</label><input type="date" id="mDate"/></div>
     <div class="form-row"><label>Heure d'arrivée</label><input type="time" id="mArrivee"/></div>
     <div id="mPauseRow" style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
-      <div class="form-row"><label>Début pause</label><input type="time" id="mPauseDebut"/></div>
-      <div class="form-row"><label>Fin pause</label><input type="time" id="mPauseFin"/></div>
+      <div class="form-row"><label id="mPauseLabelDebut">Début pause</label><input type="time" id="mPauseDebut"/></div>
+      <div class="form-row"><label id="mPauseLabelFin">Fin pause</label><input type="time" id="mPauseFin"/></div>
     </div>
     <div class="form-row"><label>Heure de départ <span style="text-transform:none;font-weight:400">(laisser vide si toujours en poste)</span></label><input type="time" id="mDepart"/></div>
     <button class="btn-add" onclick="saveModal()">💾 Enregistrer</button>
@@ -330,7 +330,7 @@
       <select id="eSite"><option value="Saint Ouen des Toits">Saint Ouen des Toits</option><option value="Chailland">Chailland</option></select>
     </div>
     <div class="form-row"><label>Email <span style="text-transform:none;font-weight:400">(pour les notifications de congés)</span></label><input type="email" id="eEmail" placeholder="prenom.nom@exemple.fr"/></div>
-    <div class="toggle-row"><input type="checkbox" id="ePause"/><label for="ePause">Pause de 30 min obligatoire (poste en production)</label></div>
+    <div class="toggle-row"><input type="checkbox" id="ePause"/><label for="ePause">Pause de 30 min obligatoire (décoché = coupure suivie en durée réelle)</label></div>
     <div class="form-row"><label>Jours de repos habituels</label>
       <div class="days-check" id="eRepos"></div>
     </div>
@@ -369,7 +369,7 @@
         <select id="nSite"><option value="Saint Ouen des Toits">Saint Ouen des Toits</option><option value="Chailland">Chailland</option></select>
       </div>
       <div class="form-row"><label>Email <span style="text-transform:none;font-weight:400">(pour les notifications de congés)</span></label><input type="email" id="nEmail" placeholder="prenom.nom@exemple.fr"/></div>
-      <div class="toggle-row"><input type="checkbox" id="nPause" checked/><label for="nPause">Pause de 30 min obligatoire (poste en production)</label></div>
+      <div class="toggle-row"><input type="checkbox" id="nPause" checked/><label for="nPause">Pause de 30 min obligatoire (décoché = coupure suivie en durée réelle)</label></div>
       <div class="form-row"><label>Jours de repos habituels <span style="text-transform:none;font-weight:400">(non travaillés)</span></label>
         <div class="days-check" id="nRepos"></div>
       </div>
@@ -594,7 +594,10 @@ function requestAdminAccess(){
 function empStatusInfo(emp){
   const sess=sessions[emp.id];
   if(!sess) return {cls:'status-out', label:'● Absent'};
-  if(sess.state==='pause') return {cls:'status-pause', label:'☕ En pause'};
+  if(sess.state==='pause'){
+    const hasPause=emp.pause!==false;
+    return {cls:'status-pause', label: hasPause?'☕ En pause':'🍽 En coupure'};
+  }
   return {cls:'status-in', label:'✓ Présent'};
 }
 
@@ -618,17 +621,26 @@ function renderEmpGrid(){
 renderEmpGrid();
 
 // ══════════════════════════════════════════
-//  SÉLECTION & PIN (étapes : arrivée → [pause → fin de pause] → départ)
-//  Les salariés en production ont une pause obligatoire (emp.pause !== false).
-//  Les salariés sans pause (ex: vendeuses en coupure) passent directement de l'arrivée au départ.
+//  SÉLECTION & PIN (4 étapes : arrivée → début pause/coupure → fin pause/coupure → départ)
+//  Les salariés en production ont une PAUSE obligatoire de 30 min minimum (emp.pause !== false) :
+//  la durée minimum réglée dans les paramètres est toujours déduite, même si la pause réelle est plus courte.
+//  Les salariés en COUPURE (ex: vendeuses, emp.pause === false) pointent aussi un début et une fin,
+//  mais c'est la durée RÉELLE de la coupure qui est déduite, sans minimum forcé (la coupure peut durer
+//  plusieurs heures et n'est jamais rémunérée).
 // ══════════════════════════════════════════
 function pinStepInfo(emp){
   const sess=sessions[emp.id];
   const hasPause=emp.pause!==false;
   if(!sess) return {label:'ENREGISTRER MON ARRIVÉE', sub:'➡️ Enregistrez votre ARRIVÉE', bg:'var(--gold)', fg:'var(--navy)'};
-  if(hasPause){
-    if(sess.state==='in')    return {label:'DÉBUT DE PAUSE', sub:'☕ Enregistrez le début de votre pause', bg:'#C0710A', fg:'#fff'};
-    if(sess.state==='pause') return {label:'FIN DE PAUSE', sub:'🔄 Enregistrez la fin de votre pause', bg:'var(--green)', fg:'#fff'};
+  if(sess.state==='in'){
+    return hasPause
+      ? {label:'DÉBUT DE PAUSE', sub:'☕ Enregistrez le début de votre pause', bg:'#C0710A', fg:'#fff'}
+      : {label:'DÉPART EN COUPURE', sub:'🍽 Enregistrez le début de votre coupure', bg:'#C0710A', fg:'#fff'};
+  }
+  if(sess.state==='pause'){
+    return hasPause
+      ? {label:'FIN DE PAUSE', sub:'🔄 Enregistrez la fin de votre pause', bg:'var(--green)', fg:'#fff'}
+      : {label:'RETOUR DE COUPURE', sub:'🔄 Enregistrez votre retour de coupure', bg:'var(--green)', fg:'#fff'};
   }
   return {label:'ENREGISTRER MON DÉPART', sub:'⬅️ Enregistrez votre DÉPART (fin de journée)', bg:'var(--red)', fg:'#fff'};
 }
@@ -719,14 +731,14 @@ function confirmPin(){
     sessions[selEmp.id]={date, arrivee:time, pauseDebut:null, pauseFin:null, state:'in'};
     saveSessions();
     toast(`✅ Arrivée ${selEmp.name} — ${time}`,'t-success');
-  } else if(hasPause && sess.state==='in'){
+  } else if(sess.state==='in'){
     sess.pauseDebut=time; sess.state='pause';
     saveSessions();
-    toast(`☕ Début de pause ${selEmp.name} — ${time}`,'t-info');
-  } else if(hasPause && sess.state==='pause'){
+    toast(hasPause?`☕ Début de pause ${selEmp.name} — ${time}`:`🍽 Départ en coupure ${selEmp.name} — ${time}`,'t-info');
+  } else if(sess.state==='pause'){
     sess.pauseFin=time; sess.state='in2';
     saveSessions();
-    toast(`🔄 Fin de pause ${selEmp.name} — ${time}`,'t-info');
+    toast(hasPause?`🔄 Fin de pause ${selEmp.name} — ${time}`:`🔄 Retour de coupure ${selEmp.name} — ${time}`,'t-info');
   } else {
     const entry=buildPointageEntry(selEmp.id, sess.date, sess.arrivee, sess.pauseDebut, sess.pauseFin, time, hasPause);
     pointages.push(entry);
@@ -760,17 +772,14 @@ function populateModalEmpSelect(selectedId){
   sel.disabled=false;
 }
 
-// Affiche ou masque les champs de pause dans la modale de pointage selon que
-// le salarié sélectionné a une pause obligatoire ou non.
+// Change le libellé des champs "pause" de la modale selon que le salarié sélectionné
+// a une pause obligatoire (30 min min.) ou une coupure (durée réelle, sans minimum).
 function updateModalPauseVisibility(){
   const empId=+document.getElementById('mEmp').value;
   const emp=employees.find(e=>e.id===empId);
   const hasPause=!emp || emp.pause!==false;
-  document.getElementById('mPauseRow').style.display=hasPause?'grid':'none';
-  if(!hasPause){
-    document.getElementById('mPauseDebut').value='';
-    document.getElementById('mPauseFin').value='';
-  }
+  document.getElementById('mPauseLabelDebut').textContent=hasPause?'Début pause':'Départ en coupure';
+  document.getElementById('mPauseLabelFin').textContent=hasPause?'Fin pause':'Retour de coupure';
 }
 
 function openEditModal(pointageId){
@@ -832,8 +841,8 @@ function saveModal(){
   const hasPause=!emp || emp.pause!==false;
   const date=document.getElementById('mDate').value;
   const arrivee=document.getElementById('mArrivee').value;
-  const pauseDebut=hasPause?document.getElementById('mPauseDebut').value:'';
-  const pauseFin=hasPause?document.getElementById('mPauseFin').value:'';
+  const pauseDebut=document.getElementById('mPauseDebut').value;
+  const pauseFin=document.getElementById('mPauseFin').value;
   const depart=document.getElementById('mDepart').value;
 
   if(!date||!arrivee){ toast("❌ Date et heure d'arrivée requises",'t-error'); return; }
@@ -1218,9 +1227,10 @@ function renderDash(){
         const emp=employees.find(e=>String(e.id)===String(id));
         if(!emp) return '';
         const sess=sessions[id];
+        const hasPause=emp.pause!==false;
         let statutTxt=`arrivé(e) à ${sess.arrivee}`;
-        if(sess.state==='pause') statutTxt+=` — en pause depuis ${sess.pauseDebut}`;
-        else if(sess.state==='in2') statutTxt+=` — pause ${sess.pauseDebut}–${sess.pauseFin}, de retour`;
+        if(sess.state==='pause') statutTxt+= hasPause?` — en pause depuis ${sess.pauseDebut}`:` — en coupure depuis ${sess.pauseDebut}`;
+        else if(sess.state==='in2') statutTxt+= hasPause?` — pause ${sess.pauseDebut}–${sess.pauseFin}, de retour`:` — coupure ${sess.pauseDebut}–${sess.pauseFin}, de retour`;
         return `<div class="sess-card">
           <div class="sess-info"><b>${emp.name}</b> — ${statutTxt} (${new Date(sess.date+'T12:00:00').toLocaleDateString('fr-FR')})</div>
           <button class="btn-edit" onclick="openSessionEditModal('${id}')">✏️ Corriger / clôturer</button>
@@ -1534,7 +1544,7 @@ function renderAdmin(){
     const ini=emp.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
     const reposLbl=(emp.repos&&emp.repos.length)?DAY_LABELS.filter(d=>emp.repos.includes(d.v)).map(d=>d.l).join(', '):'Aucun';
     const emailLbl=emp.email?emp.email:'<span style="color:#C0710A">non renseigné</span>';
-    const pauseLbl=(emp.pause!==false)?'Oui (30 min)':'Non (coupure)';
+    const pauseLbl=(emp.pause!==false)?'Pause 30 min min.':'Coupure (durée réelle)';
     list.innerHTML+=`<div class="emp-list-item">
       <div class="emp-info">
         <div class="mini-av" style="background:${emp.color}">${ini}</div>
