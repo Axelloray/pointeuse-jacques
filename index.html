@@ -277,6 +277,12 @@
     <h3>🕐 Demandes en attente de validation</h3>
     <div id="pendingCongesList"></div>
   </div>
+
+  <div class="admin-card" style="margin-top:1.2rem">
+    <h3>📝 Gérer les congés validés</h3>
+    <p style="font-size:.78rem;color:var(--gray);margin-bottom:.8rem">Modifiez les dates ou le type d'un congé déjà validé, ou supprimez-le (erreur de saisie, changement de planning...).</p>
+    <div id="validatedCongesList"></div>
+  </div>
 </div>
 
 <!-- ══════════ PAGE DASHBOARD ══════════ -->
@@ -1017,6 +1023,7 @@ function updatePendingBadge(){
 
 function renderPendingConges(){
   if(!adminUnlocked) return; // sécurité : cette page ne devrait jamais être accessible sans le code gérant
+  renderValidatedConges(); // rafraîchit aussi la liste des congés validés (même page)
   const list=document.getElementById('pendingCongesList');
   const pending=conges.filter(c=>c.status==='attente');
 
@@ -1044,12 +1051,125 @@ function renderPendingConges(){
 function deleteConge(id){
   if(!adminUnlocked){ toast('🔒 Seul le gérant peut supprimer un congé','t-error'); return; }
   if(!confirm('Supprimer ce congé ?')) return;
+  if(editingCongeId===id) editingCongeId=null;
   conges=conges.filter(c=>c.id!==id);
   saveConges();
   renderCongesCalendar();
   renderPendingConges();
   updatePendingBadge();
   toast('🗑 Congé supprimé','t-info');
+}
+
+// ══════════════════════════════════════════
+//  GESTION DES CONGÉS VALIDÉS (gérant)
+// ══════════════════════════════════════════
+let editingCongeId=null;
+
+const CONGE_TYPES=['Congés payés','Absence non rémunérée','Repos compensateur'];
+
+function renderValidatedConges(){
+  const box=document.getElementById('validatedCongesList');
+  if(!box) return;
+  if(!adminUnlocked){ box.innerHTML=''; return; }
+
+  const valides=conges.filter(c=>c.status==='validee').sort((a,b)=>b.start.localeCompare(a.start));
+
+  if(!valides.length){
+    box.innerHTML='<p style="color:var(--gray);font-size:.85rem">Aucun congé validé pour le moment.</p>';
+    return;
+  }
+
+  box.innerHTML=valides.map(c=>{
+    const emp=employees.find(e=>e.id===c.empId);
+    if(!emp) return '';
+    const initials=emp.name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+
+    // ── Mode édition : formulaire en ligne ──
+    if(editingCongeId===c.id){
+      const typeOptions=CONGE_TYPES.map(t=>`<option value="${t}" ${c.type===t?'selected':''}>${t}</option>`).join('');
+      return `<div class="pending-item" style="background:#F0F7FF;border-color:var(--blue);flex-direction:column;align-items:stretch">
+        <div class="pending-info" style="margin-bottom:.6rem"><b>${emp.name}</b> <span style="color:var(--gray);font-size:.75rem">(${emp.site})</span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.6rem;margin-bottom:.6rem">
+          <div class="form-row" style="margin-bottom:0"><label>Type</label><select id="editType">${typeOptions}</select></div>
+          <div class="form-row" style="margin-bottom:0"><label>Du</label><input type="date" id="editStart" value="${c.start}"/></div>
+          <div class="form-row" style="margin-bottom:0"><label>Au</label><input type="date" id="editEnd" value="${c.end}"/></div>
+        </div>
+        <div class="pending-actions" style="justify-content:flex-end">
+          <button class="btn-approve" onclick="saveEditConge(${c.id})">💾 Enregistrer</button>
+          <button class="btn-sm btn-navy" onclick="cancelEditConge()">Annuler</button>
+        </div>
+      </div>`;
+    }
+
+    // ── Mode affichage normal ──
+    const periode=c.start===c.end
+      ? new Date(c.start+'T12:00:00').toLocaleDateString('fr-FR')
+      : `${new Date(c.start+'T12:00:00').toLocaleDateString('fr-FR')} → ${new Date(c.end+'T12:00:00').toLocaleDateString('fr-FR')}`;
+    const jours=Math.round((new Date(c.end)-new Date(c.start))/86400000)+1;
+    return `<div class="pending-item" style="background:#F0FDF4;border-color:var(--green)">
+      <div class="pending-info" style="display:flex;align-items:center;gap:.6rem">
+        <div style="width:26px;height:26px;border-radius:50%;background:${emp.color};display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:700;color:#fff;flex-shrink:0">${initials}</div>
+        <span><b>${emp.name}</b> — ${c.type} — ${periode} <span style="color:var(--gray);font-size:.73rem">(${jours}j)</span></span>
+      </div>
+      <div class="pending-actions">
+        <button class="btn-sm btn-navy" onclick="startEditConge(${c.id})">✏️ Modifier</button>
+        <button class="btn-reject" onclick="deleteConge(${c.id})">🗑 Supprimer</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function startEditConge(id){
+  if(!adminUnlocked){ toast('🔒 Seul le gérant peut modifier un congé','t-error'); return; }
+  editingCongeId=id;
+  renderValidatedConges();
+}
+
+function cancelEditConge(){
+  editingCongeId=null;
+  renderValidatedConges();
+}
+
+function saveEditConge(id){
+  if(!adminUnlocked){ toast('🔒 Seul le gérant peut modifier un congé','t-error'); return; }
+  const c=conges.find(x=>x.id===id);
+  if(!c) return;
+  const type=document.getElementById('editType').value;
+  const start=document.getElementById('editStart').value;
+  const end=document.getElementById('editEnd').value;
+
+  if(!start||!end){ toast('❌ Dates requises','t-error'); return; }
+  if(end<start){ toast('❌ La date de fin doit être après la date de début','t-error'); return; }
+
+  const modifie = c.type!==type || c.start!==start || c.end!==end;
+  c.type=type; c.start=start; c.end=end;
+  saveConges();
+  editingCongeId=null;
+
+  const emp=employees.find(e=>e.id===c.empId);
+  toast(`✏️ Congé modifié pour ${emp?emp.name:''}`,'t-success');
+  if(modifie && emp) notifyEmployeeCongeModified(emp, c);
+
+  renderValidatedConges();
+  renderCongesCalendar();
+  updatePendingBadge();
+}
+
+// Prévient le salarié par email que son congé validé a été modifié par le gérant
+function notifyEmployeeCongeModified(emp, conge){
+  if(!emp.email){ console.log(`Pas d'email renseigné pour ${emp.name}, notification non envoyée`); return; }
+  const periode=conge.start===conge.end
+    ? new Date(conge.start+'T12:00:00').toLocaleDateString('fr-FR')
+    : `du ${new Date(conge.start+'T12:00:00').toLocaleDateString('fr-FR')} au ${new Date(conge.end+'T12:00:00').toLocaleDateString('fr-FR')}`;
+  emailjs.send('service_i0lfwfg','template_s58kq34',{
+    to_email: emp.email,
+    subject: `✏️ Votre congé a été modifié`,
+    message: `Bonjour ${emp.name},\n\nVotre congé a été modifié par le gérant.\n\nNouvelles informations : ${conge.type} ${periode}.\n\nN'hésite pas à te rapprocher de lui pour toute question.`
+  }).then(()=>{
+    console.log(`Notification de modification envoyée à ${emp.email}`);
+  }).catch(err=>{
+    console.error('Erreur envoi notification modification :', err);
+  });
 }
 
 function changeCongesMonth(delta){
