@@ -159,6 +159,13 @@
     .site-filter-btn{background:var(--off);border:1.5px solid var(--light);border-radius:20px;padding:.4rem .9rem;font-size:.76rem;font-weight:700;cursor:pointer;color:var(--gray);transition:all .15s}
     .site-filter-btn.active{background:var(--navy);border-color:var(--navy);color:#fff}
 
+    /* ── FEUILLE D'HEURES / SIGNATURE ── */
+    .sig-canvas{border:2px dashed var(--gold);border-radius:10px;background:#fff;cursor:crosshair;touch-action:none;width:100%;max-width:420px;display:block}
+    .sig-zone{background:#FFFBF0;border:1.5px solid var(--gold);border-radius:10px;padding:1rem;margin-top:1rem}
+    .sig-hint{font-size:.75rem;color:var(--gray);margin:.4rem 0 .6rem}
+    .feuille-signed-badge{display:inline-flex;align-items:center;gap:.4rem;background:#D1FAE5;color:#065F46;border-radius:6px;padding:.35rem .7rem;font-size:.78rem;font-weight:700}
+    .sig-thumb{max-height:56px;max-width:170px;border:1px solid var(--light);border-radius:6px;background:#fff;padding:2px}
+
     /* ── TOAST ── */
     .toast{position:fixed;top:1rem;right:1rem;padding:.75rem 1.2rem;border-radius:8px;font-weight:700;font-size:.86rem;z-index:9999;transform:translateY(-100px);transition:transform .3s;box-shadow:0 4px 18px rgba(0,0,0,.18);max-width:320px}
     .toast.show{transform:translateY(0)}
@@ -184,8 +191,10 @@
   <div class="nav-tabs">
     <button class="tab active" onclick="showPage('pointer',this)">⏱ Pointer</button>
     <button class="tab" onclick="showPage('conges',this)">🏖 Congés</button>
+    <button class="tab" onclick="showPage('feuille',this)">✍ Feuille d'heures</button>
     <button class="tab" id="tabDashboard" style="display:none" onclick="showPage('dashboard',this)">📊 Dashboard</button>
     <button class="tab" id="tabRecap" style="display:none" onclick="showPage('recap',this)">📅 Récap</button>
+    <button class="tab" id="tabFeuilles" style="display:none" onclick="showPage('feuilles',this)">🖊 Feuilles signées</button>
     <button class="tab" id="tabValidConges" style="display:none" onclick="showPage('valid-conges',this)">✅ Valider congés<span id="pendingBadge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:.05rem .4rem;font-size:.65rem;margin-left:.3rem"></span></button>
     <button class="tab" id="tabAdmin" style="display:none" onclick="showPage('admin',this)">⚙️ Admin</button>
     <button class="tab" id="tabLock" onclick="requestAdminAccess()">🔒 Accès gérant</button>
@@ -282,6 +291,37 @@
     <h3>📝 Gérer les congés validés</h3>
     <p style="font-size:.78rem;color:var(--gray);margin-bottom:.8rem">Modifiez les dates ou le type d'un congé déjà validé, ou supprimez-le (erreur de saisie, changement de planning...).</p>
     <div id="validatedCongesList"></div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE FEUILLE D'HEURES (salarié : consultation + signature) ══════════ -->
+<div class="page" id="page-feuille">
+  <div class="dash-header"><div class="dash-title">✍ Ma feuille d'heures</div></div>
+  <div class="admin-card" style="margin-bottom:1.2rem">
+    <h3>📄 Consulter et signer ma feuille d'heures</h3>
+    <p style="font-size:.8rem;color:var(--gray);margin-bottom:.8rem;line-height:1.5">À la fin de chaque mois, vérifiez vos heures puis apposez votre signature pour valider votre feuille d'heures. Une copie est automatiquement envoyée au gérant par email et archivée.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem">
+      <div class="form-row"><label>Salarié</label><select id="fEmp"></select></div>
+      <div class="form-row"><label>Mois</label><select id="fMonth"></select></div>
+      <div class="form-row"><label>Code PIN</label><input type="password" id="fPin" maxlength="4" placeholder="••••"/></div>
+    </div>
+    <button class="btn-add" style="max-width:260px" onclick="showFeuille()">📄 Afficher ma feuille d'heures</button>
+  </div>
+  <div id="feuilleContent"></div>
+</div>
+
+<!-- ══════════ PAGE FEUILLES SIGNÉES (protégée, gérant uniquement) ══════════ -->
+<div class="page" id="page-feuilles">
+  <div class="dash-header">
+    <div class="dash-title">🖊 Feuilles d'heures signées</div>
+    <div class="dash-controls">
+      <select class="sel" id="feuillesMonthFilter" onchange="renderFeuillesSignees()"><option value="all">Tous les mois</option></select>
+    </div>
+  </div>
+  <div class="admin-card">
+    <h3>📚 Archives des feuilles signées</h3>
+    <p style="font-size:.78rem;color:var(--gray);margin-bottom:.8rem">Chaque feuille signée par un salarié apparaît ici. Vous pouvez la télécharger en PDF (feuille complète jour par jour + signature).</p>
+    <div id="feuillesList"></div>
   </div>
 </div>
 
@@ -396,6 +436,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 emailjs.init({ publicKey: "Hx45flDjyjWz_haqo" });
 </script>
@@ -442,6 +483,7 @@ let pointages = [];
 let sessions  = {};   // {empId: {arrivee, date}}
 let settings  = {email:'gerant@boulangerie-desforges.fr', heures:35, adminPin:'0000', seuilHeureSup:10, pauseMin:30};
 let conges    = [];   // {id, empId, type, start, end}
+let signatures = [];  // {id, empId, month:'YYYY-MM', signedAt, signature(dataURL), totalH}
 let congesMonthDate = new Date();
 let congesSiteFilter = 'all'; // 'all' | 'Saint Ouen des Toits' | 'Chailland'
 
@@ -455,8 +497,10 @@ const pointagesRef = db.ref('pointages');
 const sessionsRef  = db.ref('sessions');
 const settingsRef  = db.ref('settings');
 const congesRef    = db.ref('conges');
+const signaturesRef = db.ref('signatures');
 
 function saveEmployees(){ employeesRef.set(employees); }
+function saveSignatures(){ signaturesRef.set(signatures); }
 function savePointages(){ pointagesRef.set(pointages); }
 function saveSessions(){ sessionsRef.set(sessions); }
 function saveSettingsData(){ settingsRef.set(settings); }
@@ -502,6 +546,10 @@ firebase.auth().onAuthStateChanged(user=>{
     if(document.getElementById('page-conges').classList.contains('active')) renderCongesCalendar();
     if(document.getElementById('page-valid-conges').classList.contains('active')) renderPendingConges();
     updatePendingBadge();
+  });
+  signaturesRef.on('value', snap=>{
+    signatures = snap.val() ? Object.values(snap.val()) : [];
+    if(document.getElementById('page-feuilles').classList.contains('active')) renderFeuillesSignees();
   });
 });
 
@@ -555,7 +603,7 @@ setInterval(tick,1000); tick();
 // ══════════════════════════════════════════
 //  NAVIGATION
 // ══════════════════════════════════════════
-const PROTECTED_PAGES=['dashboard','recap','admin','valid-conges'];
+const PROTECTED_PAGES=['dashboard','recap','admin','valid-conges','feuilles'];
 
 function showPage(id, btn){
   if(PROTECTED_PAGES.includes(id) && !adminUnlocked){
@@ -571,6 +619,8 @@ function showPage(id, btn){
   if(id==='admin') renderAdmin();
   if(id==='conges'){ populateCongesForm(); renderCongesCalendar(); }
   if(id==='valid-conges') renderPendingConges();
+  if(id==='feuille') initFeuillePage();
+  if(id==='feuilles') renderFeuillesSignees();
 }
 
 // ══════════════════════════════════════════
@@ -585,6 +635,7 @@ function requestAdminAccess(){
     document.getElementById('tabDashboard').style.display='inline-block';
     document.getElementById('tabRecap').style.display='inline-block';
     document.getElementById('tabValidConges').style.display='inline-block';
+    document.getElementById('tabFeuilles').style.display='inline-block';
     document.getElementById('tabAdmin').style.display='inline-block';
     document.getElementById('tabLock').textContent='🔓 Gérant connecté';
     toast('🔓 Accès gérant débloqué','t-success');
@@ -1636,6 +1687,352 @@ function sendEmail(){
     console.error('Erreur EmailJS :', err);
     toast('❌ Échec de l\'envoi — vérifie la console','t-error');
   });
+}
+
+// ══════════════════════════════════════════
+//  FEUILLES D'HEURES SIGNÉES
+//  Le salarié consulte sa feuille du mois, la signe (canvas) ; la feuille est
+//  archivée dans Firebase, le gérant reçoit un email détaillé et peut télécharger le PDF.
+// ══════════════════════════════════════════
+const MOIS_FR=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+function moisLabelOf(monthStr){ // 'YYYY-MM' → 'Juillet 2026'
+  const [y,m]=monthStr.split('-').map(Number);
+  const l=MOIS_FR[m-1];
+  return l.charAt(0).toUpperCase()+l.slice(1)+' '+y;
+}
+
+// Construit la feuille d'heures d'un salarié pour un mois donné (m 1-based)
+function buildFeuilleData(empId,y,m){
+  const pad=n=>String(n).padStart(2,'0');
+  const moisPrefix=`${y}-${pad(m)}`;
+  const daysInMonth=new Date(y,m,0).getDate();
+  const emp=employees.find(e=>String(e.id)===String(empId));
+  const empPointages=pointages.filter(p=>String(p.empId)===String(empId) && p.date.startsWith(moisPrefix));
+  const empConges=conges.filter(c=>String(c.empId)===String(empId) && c.status==='validee' && joursCongeDansMois(c.start,c.end,y,m)>0);
+  const rows=[]; let totalH=0;
+  for(let d=1; d<=daysInMonth; d++){
+    const dateStr=`${y}-${pad(m)}-${pad(d)}`;
+    const dateObj=new Date(dateStr+'T12:00:00');
+    const jourLbl=dateObj.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+    const weekday=dateObj.getDay();
+    const dayPointages=empPointages.filter(p=>p.date===dateStr);
+    const dayConge=empConges.find(c=>dateStr>=c.start && dateStr<=c.end);
+    const reposHabituel=(emp && emp.repos||[]).includes(weekday);
+    let arrivee='',pause='',depart='',duree='',statut='';
+    if(dayPointages.length){
+      const dureeJour=dayPointages.reduce((a,p)=>a+p.duree,0);
+      arrivee=dayPointages.map(p=>p.arrivee).join(' / ');
+      depart=dayPointages.map(p=>p.depart||'').join(' / ');
+      pause=dayPointages.map(p=>(p.pauseDebut&&p.pauseFin)?`${p.pauseDebut}-${p.pauseFin}`:'').filter(Boolean).join(' / ');
+      duree=dureeJour.toFixed(2);
+      totalH+=dureeJour;
+      statut='Travaillé';
+    } else if(dayConge){ statut=dayConge.type; }
+    else if(reposHabituel){ statut='Repos habituel'; }
+    else { statut='—'; }
+    rows.push({dateStr,jourLbl,arrivee,pause,depart,duree,statut});
+  }
+  return {rows,totalH,emp};
+}
+
+// ── Page salarié : formulaire ──
+let feuilleCurrent=null; // {empId, month:'YYYY-MM'} après vérification du PIN
+
+function initFeuillePage(){
+  const selE=document.getElementById('fEmp');
+  const prev=selE.value;
+  selE.innerHTML='';
+  employees.forEach(e=>selE.appendChild(new Option(e.name,e.id)));
+  if(prev) selE.value=prev;
+
+  const selM=document.getElementById('fMonth');
+  if(!selM.options.length){
+    const now=new Date();
+    const pad=n=>String(n).padStart(2,'0');
+    for(let i=0;i<4;i++){
+      const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+      const val=`${d.getFullYear()}-${pad(d.getMonth()+1)}`;
+      selM.appendChild(new Option(moisLabelOf(val),val));
+    }
+  }
+  document.getElementById('feuilleContent').innerHTML='';
+  feuilleCurrent=null;
+}
+
+function showFeuille(){
+  const empId=+document.getElementById('fEmp').value;
+  const pin=document.getElementById('fPin').value.trim();
+  const month=document.getElementById('fMonth').value;
+  const emp=employees.find(e=>e.id===empId);
+  if(!emp){ toast('❌ Sélectionnez un salarié','t-error'); return; }
+  if(pin!==emp.pin && !adminUnlocked){ toast('❌ Code PIN incorrect','t-error'); return; }
+  document.getElementById('fPin').value='';
+  feuilleCurrent={empId,month};
+  renderFeuille();
+}
+
+function renderFeuille(){
+  if(!feuilleCurrent) return;
+  const {empId,month}=feuilleCurrent;
+  const [y,m]=month.split('-').map(Number);
+  const {rows,totalH,emp}=buildFeuilleData(empId,y,m);
+  const box=document.getElementById('feuilleContent');
+  const existing=signatures.find(s=>String(s.empId)===String(empId) && s.month===month);
+
+  const tableHtml=`<div class="table-wrap" style="margin-bottom:1rem">
+    <table><thead><tr><th>Date</th><th>Arrivée</th><th>Pause</th><th>Départ</th><th>Durée nette</th><th>Statut</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td>${r.jourLbl}</td><td>${r.arrivee||'—'}</td><td>${r.pause||'—'}</td><td>${r.depart||'—'}</td>
+      <td>${r.duree?`<strong>${(+r.duree).toFixed(1)}h</strong>`:'—'}</td>
+      <td>${r.statut==='Travaillé'?'<span class="badge b-green">Travaillé</span>':r.statut==='—'?'—':`<span class="badge b-gold">${r.statut}</span>`}</td>
+    </tr>`).join('')}
+    <tr style="background:var(--off)"><td colspan="4" style="font-weight:700;color:var(--navy)">TOTAL DU MOIS</td><td colspan="2" style="font-weight:700;color:var(--navy);font-size:.95rem">${totalH.toFixed(2)}h</td></tr>
+    </tbody></table>
+  </div>`;
+
+  let sigHtml='';
+  if(existing){
+    sigHtml=`<div class="sig-zone" style="background:#F0FDF4;border-color:var(--green)">
+      <span class="feuille-signed-badge">✅ Feuille signée le ${new Date(existing.signedAt).toLocaleDateString('fr-FR')} à ${new Date(existing.signedAt).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</span>
+      <div style="margin-top:.7rem"><img src="${existing.signature}" class="sig-thumb" alt="Signature"/></div>
+      <p class="sig-hint" style="margin-bottom:0">Cette feuille a déjà été validée. En cas d'erreur, rapprochez-vous du gérant.</p>
+    </div>`;
+  } else {
+    sigHtml=`<div class="sig-zone">
+      <h3 style="font-size:.87rem;font-weight:700;color:var(--navy);margin-bottom:.3rem">✍ Signature du salarié</h3>
+      <p class="sig-hint">En signant, je certifie l'exactitude des heures ci-dessus pour le mois de ${moisLabelOf(month)}. Signez dans le cadre avec le doigt ou la souris :</p>
+      <canvas id="sigCanvas" class="sig-canvas" width="420" height="140"></canvas>
+      <div style="display:flex;gap:.5rem;margin-top:.7rem;flex-wrap:wrap">
+        <button class="btn-sm btn-navy" onclick="clearSignature()">🧹 Effacer</button>
+        <button class="btn-sm btn-green" onclick="signFeuille()">✍ Signer et valider ma feuille d'heures</button>
+      </div>
+    </div>`;
+  }
+
+  box.innerHTML=`<div class="admin-card">
+    <h3>📄 Feuille d'heures — ${emp?emp.name:'?'} — ${moisLabelOf(month)}</h3>
+    ${tableHtml}${sigHtml}
+  </div>`;
+
+  if(!existing) initSignaturePad();
+  box.scrollIntoView({behavior:'smooth'});
+}
+
+// ── Pad de signature (souris + tactile) ──
+let sigHasDrawn=false;
+function initSignaturePad(){
+  const canvas=document.getElementById('sigCanvas');
+  if(!canvas) return;
+  const ctx=canvas.getContext('2d');
+  ctx.lineWidth=2.2; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#0D1B2A';
+  sigHasDrawn=false;
+  let drawing=false;
+  const pos=e=>{
+    const r=canvas.getBoundingClientRect();
+    const sx=canvas.width/r.width, sy=canvas.height/r.height;
+    const src=e.touches?e.touches[0]:e;
+    return {x:(src.clientX-r.left)*sx, y:(src.clientY-r.top)*sy};
+  };
+  const start=e=>{ e.preventDefault(); drawing=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); };
+  const move=e=>{ if(!drawing) return; e.preventDefault(); const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); sigHasDrawn=true; };
+  const end=()=>{ drawing=false; };
+  canvas.addEventListener('mousedown',start); canvas.addEventListener('mousemove',move);
+  window.addEventListener('mouseup',end);
+  canvas.addEventListener('touchstart',start,{passive:false}); canvas.addEventListener('touchmove',move,{passive:false});
+  canvas.addEventListener('touchend',end);
+}
+function clearSignature(){
+  const canvas=document.getElementById('sigCanvas');
+  if(!canvas) return;
+  canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
+  sigHasDrawn=false;
+}
+
+function signFeuille(){
+  if(!feuilleCurrent) return;
+  if(!sigHasDrawn){ toast('❌ Merci de signer dans le cadre avant de valider','t-error'); return; }
+  const canvas=document.getElementById('sigCanvas');
+  const {empId,month}=feuilleCurrent;
+  if(signatures.some(s=>String(s.empId)===String(empId) && s.month===month)){
+    toast('❌ Cette feuille est déjà signée','t-error'); return;
+  }
+  const [y,m]=month.split('-').map(Number);
+  const {totalH,emp}=buildFeuilleData(empId,y,m);
+  const sig={
+    id:Date.now(),
+    empId, month,
+    signedAt:new Date().toISOString(),
+    signature:canvas.toDataURL('image/png'),
+    totalH:+totalH.toFixed(2)
+  };
+  signatures.push(sig);
+  saveSignatures();
+  toast(`✅ Feuille d'heures signée — ${moisLabelOf(month)} (${totalH.toFixed(1)}h)`,'t-success');
+  sendFeuilleEmailToManager(emp, month);
+  renderFeuille();
+}
+
+// Email automatique au gérant à chaque signature, avec le détail jour par jour du mois
+function sendFeuilleEmailToManager(emp, month){
+  if(!emp) return;
+  const [y,m]=month.split('-').map(Number);
+  const {rows,totalH}=buildFeuilleData(emp.id,y,m);
+  let body=`Feuille d'heures signée — ${moisLabelOf(month)}\nBoulangerie des Forges\n\n`;
+  body+=`Salarié : ${emp.name} (${emp.site})\n`;
+  body+=`Signée le : ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}\n\n`;
+  body+=`Détail du mois :\n`;
+  rows.forEach(r=>{
+    if(r.statut==='Travaillé'){
+      body+=`${r.jourLbl} : ${r.arrivee} → ${r.depart}${r.pause?` (pause ${r.pause})`:''} = ${(+r.duree).toFixed(2)}h\n`;
+    } else if(r.statut!=='—'){
+      body+=`${r.jourLbl} : ${r.statut}\n`;
+    }
+  });
+  body+=`\nTOTAL DU MOIS : ${totalH.toFixed(2)}h\n\n`;
+  body+=`La feuille signée (avec la signature du salarié) est archivée dans l'onglet "🖊 Feuilles signées" de la pointeuse, où vous pouvez la télécharger en PDF.`;
+
+  const email=settings.email||'gerant@boulangerie-desforges.fr';
+  emailjs.send('service_i0lfwfg','template_s58kq34',{
+    to_email: email,
+    subject: `✍ Feuille d'heures signée — ${emp.name} — ${moisLabelOf(month)}`,
+    message: body
+  }).then(()=>{
+    console.log('Feuille d\'heures signée envoyée au gérant');
+  }).catch(err=>{
+    console.error('Erreur envoi email feuille signée :', err);
+    toast('⚠️ Feuille signée, mais l\'email au gérant n\'a pas pu partir','t-error');
+  });
+}
+
+// ── Côté gérant : archives des feuilles signées ──
+function renderFeuillesSignees(){
+  if(!adminUnlocked) return;
+  const list=document.getElementById('feuillesList');
+  const filterSel=document.getElementById('feuillesMonthFilter');
+
+  // Alimente le filtre des mois (uniquement les mois présents dans les signatures)
+  const months=[...new Set(signatures.map(s=>s.month))].sort().reverse();
+  const prev=filterSel.value;
+  filterSel.innerHTML='<option value="all">Tous les mois</option>';
+  months.forEach(mo=>filterSel.appendChild(new Option(moisLabelOf(mo),mo)));
+  if([...filterSel.options].some(o=>o.value===prev)) filterSel.value=prev;
+
+  const filter=filterSel.value;
+  const items=signatures
+    .filter(s=>filter==='all'||s.month===filter)
+    .sort((a,b)=>b.month.localeCompare(a.month) || (b.signedAt||'').localeCompare(a.signedAt||''));
+
+  if(!items.length){
+    list.innerHTML='<p style="color:var(--gray);font-size:.85rem">Aucune feuille d\'heures signée pour le moment.</p>';
+    return;
+  }
+
+  list.innerHTML=items.map(s=>{
+    const emp=employees.find(e=>String(e.id)===String(s.empId));
+    const name=emp?emp.name:'Salarié supprimé';
+    const site=emp?emp.site:'';
+    const initials=name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+    const color=emp?emp.color:'#6B7280';
+    const dt=new Date(s.signedAt);
+    return `<div class="pending-item" style="background:#F0FDF4;border-color:var(--green)">
+      <div class="pending-info" style="display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">
+        <div style="width:28px;height:28px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:#fff;flex-shrink:0">${initials}</div>
+        <div>
+          <b>${name}</b> <span style="color:var(--gray);font-size:.73rem">${site}</span><br>
+          <span style="font-size:.76rem">📅 ${moisLabelOf(s.month)} — <b>${(s.totalH||0).toFixed(1)}h</b> — signée le ${dt.toLocaleDateString('fr-FR')} à ${dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</span>
+        </div>
+        <img src="${s.signature}" class="sig-thumb" alt="Signature"/>
+      </div>
+      <div class="pending-actions">
+        <button class="btn-sm btn-green" onclick="downloadFeuillePDF(${s.id})">⬇ Télécharger PDF</button>
+        <button class="btn-reject" onclick="deleteSignature(${s.id})">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function deleteSignature(id){
+  if(!adminUnlocked){ toast('🔒 Seul le gérant peut supprimer une feuille signée','t-error'); return; }
+  if(!confirm('Supprimer cette feuille signée ? Le salarié pourra la signer à nouveau.')) return;
+  signatures=signatures.filter(s=>s.id!==id);
+  saveSignatures();
+  renderFeuillesSignees();
+  toast('🗑 Feuille signée supprimée','t-info');
+}
+
+// Génère et télécharge le PDF complet : feuille jour par jour + total + signature
+function downloadFeuillePDF(sigId){
+  const s=signatures.find(x=>x.id===sigId);
+  if(!s) return;
+  const emp=employees.find(e=>String(e.id)===String(s.empId));
+  const name=emp?emp.name:'Salarié supprimé';
+  const site=emp?emp.site:'';
+  const [y,m]=s.month.split('-').map(Number);
+  const {rows,totalH}=buildFeuilleData(s.empId,y,m);
+
+  const { jsPDF } = window.jspdf;
+  const doc=new jsPDF();
+  const pageW=210;
+
+  // En-tête
+  doc.setFont('helvetica','bold'); doc.setFontSize(15);
+  doc.text('FEUILLE D\'HEURES',pageW/2,16,{align:'center'});
+  doc.setFontSize(10); doc.setFont('helvetica','normal');
+  doc.text('Boulangerie des Forges',pageW/2,22,{align:'center'});
+  doc.setFont('helvetica','bold'); doc.setFontSize(12);
+  doc.text(`${name}${site?' — '+site:''}`,pageW/2,31,{align:'center'});
+  doc.text(moisLabelOf(s.month),pageW/2,38,{align:'center'});
+  doc.setDrawColor(200,168,75); doc.setLineWidth(.6);
+  doc.line(14,42,196,42);
+
+  // Tableau
+  const cols=[{x:14,l:'Date'},{x:44,l:'Arrivée'},{x:72,l:'Pause'},{x:108,l:'Départ'},{x:136,l:'Durée'},{x:156,l:'Statut'}];
+  let yy=50;
+  const header=()=>{
+    doc.setFillColor(13,27,42);
+    doc.rect(14,yy-4.5,182,6.5,'F');
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(8);
+    cols.forEach(c=>doc.text(c.l,c.x+1,yy));
+    doc.setTextColor(31,41,55); doc.setFont('helvetica','normal');
+    yy+=6;
+  };
+  header();
+  rows.forEach((r,i)=>{
+    if(yy>272){ doc.addPage(); yy=20; header(); }
+    if(i%2===0){ doc.setFillColor(245,243,238); doc.rect(14,yy-4,182,5.6,'F'); }
+    doc.setFontSize(7.5);
+    doc.text(r.jourLbl,cols[0].x+1,yy);
+    doc.text(r.arrivee||'-',cols[1].x+1,yy);
+    doc.text(r.pause||'-',cols[2].x+1,yy);
+    doc.text(r.depart||'-',cols[3].x+1,yy);
+    doc.text(r.duree?(+r.duree).toFixed(2)+' h':'-',cols[4].x+1,yy);
+    doc.text(r.statut,cols[5].x+1,yy);
+    yy+=5.6;
+  });
+
+  // Total
+  if(yy>262){ doc.addPage(); yy=20; }
+  yy+=3;
+  doc.setDrawColor(13,27,42); doc.setLineWidth(.5); doc.line(14,yy-4,196,yy-4);
+  doc.setFont('helvetica','bold'); doc.setFontSize(10);
+  doc.text('TOTAL DU MOIS :',14,yy+2);
+  doc.text(`${totalH.toFixed(2)} h`,196,yy+2,{align:'right'});
+  yy+=12;
+
+  // Bloc signature
+  if(yy>235){ doc.addPage(); yy=20; }
+  doc.setFontSize(9); doc.setFont('helvetica','normal');
+  const dt=new Date(s.signedAt);
+  doc.text(`Je soussigné(e) ${name} certifie l'exactitude des heures figurant sur la présente feuille.`,14,yy);
+  yy+=6;
+  doc.text(`Signé le ${dt.toLocaleDateString('fr-FR')} à ${dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`,14,yy);
+  yy+=4;
+  try{ doc.addImage(s.signature,'PNG',14,yy,60,20); }catch(e){ console.error('Erreur ajout signature au PDF :',e); }
+  doc.setDrawColor(160,160,160); doc.rect(13,yy-1,62,22);
+
+  const safeName=name.replace(/\s+/g,'_');
+  doc.save(`feuille_heures_${safeName}_${s.month}.pdf`);
+  toast('✅ PDF téléchargé','t-success');
 }
 
 // ══════════════════════════════════════════
