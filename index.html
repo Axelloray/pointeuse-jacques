@@ -429,7 +429,10 @@
         <div class="form-row"><label>Code d'accès gérant (4 chiffres)</label><input type="password" id="sAdminPin" maxlength="4" placeholder="••••"/></div>
         <div class="form-row"><label>Seuil alerte heures sup. (h/jour)</label><input type="number" id="sSeuilSup" min="1" max="24" step="0.5" value="10"/></div>
         <div class="form-row"><label>Pause minimum déduite (min)</label><input type="number" id="sPauseMin" min="0" max="120" step="5" value="30"/></div>
+        <div class="form-row"><label>Horaire mini le matin <span style="text-transform:none;font-weight:400">(salariés en coupure, sans pause obligatoire)</span></label><input type="time" id="sHoraireMin" value="06:45"/></div>
+        <div class="form-row"><label>Horaire maxi le soir <span style="text-transform:none;font-weight:400">(salariés en coupure, sans pause obligatoire)</span></label><input type="time" id="sHoraireMax" value="19:45"/></div>
       </div>
+      <div style="font-size:.72rem;color:var(--gray);margin-top:.4rem">ℹ️ Pour les salariés dont la case « Pause de 30 min obligatoire » est décochée, un pointage d'arrivée avant l'horaire mini sera automatiquement ramené à cet horaire, et un départ après l'horaire maxi sera ramené à celui-ci. Vous pouvez toujours corriger un pointage manuellement via « ✏️ Modifier » sur le tableau de bord si un jour un horaire différent est nécessaire.</div>
       <button class="btn-add" style="max-width:180px" onclick="saveSettings()">💾 Enregistrer</button>
     </div>
   </div>
@@ -481,7 +484,7 @@ const defaultEmployees = [
 let employees = [];
 let pointages = [];
 let sessions  = {};   // {empId: {arrivee, date}}
-let settings  = {email:'gerant@boulangerie-desforges.fr', heures:35, adminPin:'0000', seuilHeureSup:10, pauseMin:30};
+let settings  = {email:'gerant@boulangerie-desforges.fr', heures:35, adminPin:'0000', seuilHeureSup:10, pauseMin:30, horaireMin:'06:45', horaireMax:'19:45'};
 let conges    = [];   // {id, empId, type, start, end}
 let signatures = [];  // {id, empId, month:'YYYY-MM', signedAt, signature(dataURL), totalH}
 let congesMonthDate = new Date();
@@ -750,6 +753,23 @@ function minutesEntre(t1,t2){
   return diff;
 }
 
+// ── Horaires bloqués (contractuels) pour les salariés SANS pause obligatoire (coupure, ex: vendeuses) ──
+// Une arrivée pointée avant l'horaire mini (settings.horaireMin, ex 06:45) est automatiquement
+// ramenée à cet horaire. Un départ pointé après l'horaire maxi (settings.horaireMax, ex 19:45)
+// est automatiquement ramené à celui-ci. Le gérant garde la main : il peut toujours corriger
+// un pointage manuellement via la modale d'édition sur le tableau de bord.
+function toMinutes(t){ const [h,m]=t.split(':').map(Number); return h*60+m; }
+function clampHoraireCoupure(time, isArrivee){
+  if(isArrivee){
+    const min=settings.horaireMin||'06:45';
+    if(toMinutes(time)<toMinutes(min)) return min;
+  } else {
+    const max=settings.horaireMax||'19:45';
+    if(toMinutes(time)>toMinutes(max)) return max;
+  }
+  return time;
+}
+
 // Construit une entrée de pointage complète et calcule la durée nette.
 // Si le salarié a une pause obligatoire (hasPause=true), la pause est toujours déduite au minimum
 // settings.pauseMin (30 min par défaut), même si la pause réelle pointée est plus courte.
@@ -779,15 +799,20 @@ function confirmPin(){
   if(pinBuf!==selEmp.pin){ toast('❌ Code PIN incorrect','t-error'); pclr(); return; }
   const now=new Date();
   const pad=n=>String(n).padStart(2,'0');
-  const time=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  let time=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const date=now.toISOString().split('T')[0];
   const sess=sessions[selEmp.id];
   const hasPause=selEmp.pause!==false;
+  let horaireAjuste=false;
 
   if(!sess){
+    if(!hasPause){
+      const clamped=clampHoraireCoupure(time,true);
+      if(clamped!==time){ time=clamped; horaireAjuste=true; }
+    }
     sessions[selEmp.id]={date, arrivee:time, pauseDebut:null, pauseFin:null, state:'in'};
     saveSessions();
-    toast(`✅ Arrivée ${selEmp.name} — ${time}`,'t-success');
+    toast(horaireAjuste?`✅ Arrivée ${selEmp.name} — ${time} (horaire contractuel mini appliqué)`:`✅ Arrivée ${selEmp.name} — ${time}`,'t-success');
   } else if(sess.state==='in'){
     sess.pauseDebut=time; sess.state='pause';
     saveSessions();
@@ -797,12 +822,16 @@ function confirmPin(){
     saveSessions();
     toast(hasPause?`🔄 Fin de pause ${selEmp.name} — ${time}`:`🔄 Retour de coupure ${selEmp.name} — ${time}`,'t-info');
   } else {
+    if(!hasPause){
+      const clamped=clampHoraireCoupure(time,false);
+      if(clamped!==time){ time=clamped; horaireAjuste=true; }
+    }
     const entry=buildPointageEntry(selEmp.id, sess.date, sess.arrivee, sess.pauseDebut, sess.pauseFin, time, hasPause);
     pointages.push(entry);
     delete sessions[selEmp.id];
     savePointages();
     saveSessions();
-    toast(`✅ Départ ${selEmp.name} — ${time} (${entry.duree.toFixed(1)}h travaillées)`,'t-success');
+    toast(`✅ Départ ${selEmp.name} — ${time}${horaireAjuste?' (horaire contractuel maxi appliqué)':''} (${entry.duree.toFixed(1)}h travaillées)`,'t-success');
     checkOvertimeAndAlert(entry);
   }
   cancelPin();
@@ -2109,6 +2138,8 @@ function renderAdmin(){
   document.getElementById('sAdminPin').value=settings.adminPin||'0000';
   document.getElementById('sSeuilSup').value=settings.seuilHeureSup||10;
   document.getElementById('sPauseMin').value=(settings.pauseMin!=null)?settings.pauseMin:30;
+  document.getElementById('sHoraireMin').value=settings.horaireMin||'06:45';
+  document.getElementById('sHoraireMax').value=settings.horaireMax||'19:45';
 }
 
 function addEmp(){
@@ -2190,6 +2221,10 @@ function saveSettings(){
   settings.seuilHeureSup=+document.getElementById('sSeuilSup').value||10;
   settings.pauseMin=+document.getElementById('sPauseMin').value;
   if(isNaN(settings.pauseMin)) settings.pauseMin=30;
+  const hMin=document.getElementById('sHoraireMin').value;
+  const hMax=document.getElementById('sHoraireMax').value;
+  settings.horaireMin = hMin || '06:45';
+  settings.horaireMax = hMax || '19:45';
   const newPin=document.getElementById('sAdminPin').value.trim();
   if(/^\d{4}$/.test(newPin)) settings.adminPin=newPin;
   else { toast('❌ Code gérant : 4 chiffres exactement','t-error'); return; }
