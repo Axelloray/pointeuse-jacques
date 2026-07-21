@@ -348,6 +348,19 @@
   </div>
 </div>
 
+<!-- ══════════ MODALE VALIDATION/REFUS CONGÉ AVEC MESSAGE ══════════ -->
+<div class="modal-overlay" id="congeDecisionModalOverlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title" id="congeDecisionTitle">Valider la demande</div>
+    <div class="form-row">
+      <label>Message pour le salarié <span style="text-transform:none;font-weight:400">(optionnel, envoyé par email et affiché sur sa fiche congés)</span></label>
+      <textarea id="congeDecisionMessage" rows="3" placeholder="Ex : Accordé, bonnes vacances ! / Refusé car période chargée, on en reparle ensemble." style="width:100%;padding:.55rem;border-radius:6px;border:1px solid var(--light);font-family:inherit;resize:vertical"></textarea>
+    </div>
+    <button class="btn-add" id="congeDecisionConfirmBtn" onclick="confirmCongeDecision()">Confirmer</button>
+    <button class="btn-cancel" onclick="closeCongeDecisionModal()">Annuler</button>
+  </div>
+</div>
+
 <!-- ══════════ MODALE ÉDITION POINTAGE ══════════ -->
 <div class="modal-overlay" id="modalOverlay" style="display:none">
   <div class="modal-box">
@@ -1064,9 +1077,10 @@ function notifyEmployeeConge(emp, conge, approuve){
   const subject=approuve
     ? `✅ Votre demande de congé a été validée`
     : `❌ Votre demande de congé a été refusée`;
+  const messageLine = conge.message ? `\n\nMessage du gérant : ${conge.message}` : '';
   const message=approuve
-    ? `Bonjour ${emp.name},\n\nVotre demande (${conge.type}) ${periode} a été validée par le gérant.\n\nBonnes vacances !`
-    : `Bonjour ${emp.name},\n\nVotre demande (${conge.type}) ${periode} a été refusée par le gérant.\n\nN'hésite pas à te rapprocher de lui pour en discuter.`;
+    ? `Bonjour ${emp.name},\n\nVotre demande (${conge.type}) ${periode} a été validée par le gérant.${messageLine}\n\nBonnes vacances !`
+    : `Bonjour ${emp.name},\n\nVotre demande (${conge.type}) ${periode} a été refusée par le gérant.${messageLine}\n\nN'hésite pas à te rapprocher de lui pour en discuter.`;
 
   emailjs.send('service_i0lfwfg','template_s58kq34',{
     to_email: emp.email,
@@ -1079,11 +1093,39 @@ function notifyEmployeeConge(emp, conge, approuve){
   });
 }
 
-function validateConge(id, approuve){
+// ── Modale de décision (validation/refus) avec message optionnel pour le salarié ──
+let congeDecisionTarget=null, congeDecisionApprouve=null;
+
+function openCongeDecisionModal(id, approuve){
+  if(!adminUnlocked){ toast('🔒 Seul le gérant peut valider une demande','t-error'); return; }
+  congeDecisionTarget=id;
+  congeDecisionApprouve=approuve;
+  document.getElementById('congeDecisionTitle').textContent = approuve ? '✅ Valider la demande de congé' : '❌ Refuser la demande de congé';
+  document.getElementById('congeDecisionMessage').value='';
+  const btn=document.getElementById('congeDecisionConfirmBtn');
+  btn.textContent = approuve ? '✅ Valider' : '❌ Refuser';
+  btn.className = approuve ? 'btn-add' : 'btn-del';
+  document.getElementById('congeDecisionModalOverlay').style.display='flex';
+}
+
+function closeCongeDecisionModal(){
+  document.getElementById('congeDecisionModalOverlay').style.display='none';
+  congeDecisionTarget=null;
+  congeDecisionApprouve=null;
+}
+
+function confirmCongeDecision(){
+  const message=document.getElementById('congeDecisionMessage').value.trim();
+  validateConge(congeDecisionTarget, congeDecisionApprouve, message);
+  closeCongeDecisionModal();
+}
+
+function validateConge(id, approuve, message){
   if(!adminUnlocked){ toast('🔒 Seul le gérant peut valider une demande','t-error'); return; }
   const c=conges.find(x=>x.id===id);
   if(!c) return;
   c.status=approuve?'validee':'refusee';
+  c.message = message ? message : null;
   saveConges();
   const emp=employees.find(e=>e.id===c.empId);
   toast(approuve?`✅ Congé validé pour ${emp?emp.name:''}`:`❌ Congé refusé pour ${emp?emp.name:''}`, approuve?'t-success':'t-info');
@@ -1121,8 +1163,8 @@ function renderPendingConges(){
     return `<div class="pending-item">
       <div class="pending-info"><b>${emp.name}</b> — ${c.type} — ${periode}</div>
       <div class="pending-actions">
-        <button class="btn-approve" onclick="validateConge(${c.id},true)">✅ Valider</button>
-        <button class="btn-reject" onclick="validateConge(${c.id},false)">❌ Refuser</button>
+        <button class="btn-approve" onclick="openCongeDecisionModal(${c.id},true)">✅ Valider</button>
+        <button class="btn-reject" onclick="openCongeDecisionModal(${c.id},false)">❌ Refuser</button>
       </div>
     </div>`;
   }).join('');
@@ -1186,15 +1228,19 @@ function renderValidatedConges(){
       ? new Date(c.start+'T12:00:00').toLocaleDateString('fr-FR')
       : `${new Date(c.start+'T12:00:00').toLocaleDateString('fr-FR')} → ${new Date(c.end+'T12:00:00').toLocaleDateString('fr-FR')}`;
     const jours=Math.round((new Date(c.end)-new Date(c.start))/86400000)+1;
-    return `<div class="pending-item" style="background:#F0FDF4;border-color:var(--green)">
-      <div class="pending-info" style="display:flex;align-items:center;gap:.6rem">
-        <div style="width:26px;height:26px;border-radius:50%;background:${emp.color};display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:700;color:#fff;flex-shrink:0">${initials}</div>
-        <span><b>${emp.name}</b> — ${c.type} — ${periode} <span style="color:var(--gray);font-size:.73rem">(${jours}j)</span></span>
+    const messageHtml = c.message ? `<div style="font-size:.72rem;color:var(--gray);margin-top:.3rem;padding:.3rem .5rem;background:#fff;border-left:2px solid var(--green);border-radius:3px">💬 ${escHtml(c.message)}</div>` : '';
+    return `<div class="pending-item" style="background:#F0FDF4;border-color:var(--green);flex-direction:column;align-items:stretch">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem">
+        <div class="pending-info" style="display:flex;align-items:center;gap:.6rem">
+          <div style="width:26px;height:26px;border-radius:50%;background:${emp.color};display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:700;color:#fff;flex-shrink:0">${initials}</div>
+          <span><b>${emp.name}</b> — ${c.type} — ${periode} <span style="color:var(--gray);font-size:.73rem">(${jours}j)</span></span>
+        </div>
+        <div class="pending-actions">
+          <button class="btn-sm btn-navy" onclick="startEditConge(${c.id})">✏️ Modifier</button>
+          <button class="btn-reject" onclick="deleteConge(${c.id})">🗑 Supprimer</button>
+        </div>
       </div>
-      <div class="pending-actions">
-        <button class="btn-sm btn-navy" onclick="startEditConge(${c.id})">✏️ Modifier</button>
-        <button class="btn-reject" onclick="deleteConge(${c.id})">🗑 Supprimer</button>
-      </div>
+      ${messageHtml}
     </div>`;
   }).join('');
 }
@@ -1255,6 +1301,13 @@ function notifyEmployeeCongeModified(emp, conge){
 function changeCongesMonth(delta){
   congesMonthDate.setMonth(congesMonthDate.getMonth()+delta);
   renderCongesCalendar();
+}
+
+// Échappe le HTML d'un texte libre (message du gérant) avant de l'insérer dans le DOM
+function escHtml(str){
+  const d=document.createElement('div');
+  d.textContent=str;
+  return d.innerHTML;
 }
 
 function setCongesSiteFilter(site){
