@@ -236,7 +236,7 @@
     <div><span class="brand">BOULANGERIE DES FORGES</span><span class="brand-sub">POINT BY AXEL</span></div>
   </div>
   <div class="nav-tabs">
-    <button class="tab active" onclick="showPage('pointer',this)">⏱ Pointer</button>
+    <button class="tab active" id="tabPointer" onclick="showPage('pointer',this)">⏱ Pointer</button>
     <button class="tab" onclick="showPage('conges',this)">🏖 Congés</button>
     <button class="tab" onclick="showPage('feuille',this)">✍ Feuille d'heures</button>
     <button class="tab" id="tabDashboard" style="display:none" onclick="showPage('dashboard',this)">📊 Dashboard</button>
@@ -245,6 +245,7 @@
     <button class="tab" id="tabValidConges" style="display:none" onclick="showPage('valid-conges',this)">✅ Valider congés<span id="pendingBadge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:.05rem .4rem;font-size:.65rem;margin-left:.3rem"></span></button>
     <button class="tab" id="tabAdmin" style="display:none" onclick="showPage('admin',this)">⚙️ Admin</button>
     <button class="tab" id="tabLock" onclick="requestAdminAccess()">🔒 Accès gérant</button>
+    <button class="tab" id="tabUnlock" style="display:none" onclick="lockAdminAccess()">🔐 Verrouiller</button>
   </div>
   <div class="nav-time" id="navTime">--:--</div>
 </nav>
@@ -700,12 +701,27 @@ function requestAdminAccess(){
     document.getElementById('tabValidConges').style.display='inline-block';
     document.getElementById('tabFeuilles').style.display='inline-block';
     document.getElementById('tabAdmin').style.display='inline-block';
-    document.getElementById('tabLock').textContent='🔓 Gérant connecté';
+    document.getElementById('tabLock').style.display='none';
+    document.getElementById('tabUnlock').style.display='inline-block';
     toast('🔓 Accès gérant débloqué','t-success');
     showPage('dashboard', document.getElementById('tabDashboard'));
   } else {
     toast('❌ Code incorrect','t-error');
   }
+}
+
+// Referme l'accès gérant : masque les pages protégées et revient à l'onglet Pointer
+function lockAdminAccess(){
+  adminUnlocked=false;
+  document.getElementById('tabDashboard').style.display='none';
+  document.getElementById('tabRecap').style.display='none';
+  document.getElementById('tabValidConges').style.display='none';
+  document.getElementById('tabFeuilles').style.display='none';
+  document.getElementById('tabAdmin').style.display='none';
+  document.getElementById('tabUnlock').style.display='none';
+  document.getElementById('tabLock').style.display='inline-block';
+  toast('🔒 Accès gérant verrouillé','t-info');
+  showPage('pointer', document.getElementById('tabPointer'));
 }
 
 // ══════════════════════════════════════════
