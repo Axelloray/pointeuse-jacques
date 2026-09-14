@@ -299,6 +299,7 @@
           <option value="Congés payés">🏖 Congés payés</option>
           <option value="Absence non rémunérée">🚫 Absence non rémunérée</option>
           <option value="Repos compensateur">🔄 Repos compensateur</option>
+          <option value="CFA / École">🎓 CFA / École</option>
         </select>
       </div>
       <div class="form-row"><label>Du</label><input type="date" id="cStart"/></div>
@@ -1250,7 +1251,7 @@ function deleteConge(id){
 // ══════════════════════════════════════════
 let editingCongeId=null;
 
-const CONGE_TYPES=['Congés payés','Absence non rémunérée','Repos compensateur'];
+const CONGE_TYPES=['Congés payés','Absence non rémunérée','Repos compensateur','CFA / École'];
 
 function renderValidatedConges(){
   const box=document.getElementById('validatedCongesList');
