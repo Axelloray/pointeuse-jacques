@@ -147,6 +147,24 @@
       .conges-tag{font-size:.56rem}
     }
 
+    /* ── HYGIÈNE ── */
+    .subtab{background:var(--off);border:1.5px solid var(--light);color:var(--gray);padding:.5rem .9rem;border-radius:20px;cursor:pointer;font-size:.78rem;font-weight:700;letter-spacing:.3px;transition:all .2s}
+    .subtab.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+    .subtab:hover:not(.active){border-color:var(--gold)}
+    .appareil-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:.8rem}
+    .appareil-card{background:#fff;border:1.5px solid var(--light);border-radius:10px;padding:.8rem;text-align:left}
+    .appareil-add-card{border:1.5px dashed var(--gold);background:#FFFBF0}
+    .appareil-photo{width:100%;height:90px;object-fit:cover;border-radius:6px;margin-bottom:.5rem;background:var(--off);display:block}
+    .appareil-photo-empty{display:flex;align-items:center;justify-content:center;font-size:1.8rem;color:var(--light)}
+    .appareil-name{font-size:.83rem;font-weight:700;color:var(--navy)}
+    .temp-badge{font-size:.78rem;font-weight:700;padding:.15rem .5rem;border-radius:10px;display:inline-block}
+    .temp-ok{background:#D1FAE5;color:#065F46}
+    .temp-alert{background:#FEE2E2;color:#991B1B}
+    .traca-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:.7rem}
+    .traca-card{position:relative;background:var(--off);border-radius:8px;padding:.5rem;border:1px solid var(--light)}
+    .traca-photo{width:100%;height:100px;object-fit:cover;border-radius:6px;cursor:pointer;display:block}
+    .traca-meta{font-size:.7rem;color:var(--dark);margin-top:.4rem;line-height:1.35}
+
     /* ── MODAL ── */
     .modal-overlay{position:fixed;inset:0;background:rgba(13,27,42,.6);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1rem}
     .modal-box{background:#fff;border-radius:14px;padding:1.6rem;max-width:340px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.3)}
@@ -239,6 +257,7 @@
     <button class="tab active" id="tabPointer" onclick="showPage('pointer',this)">⏱ Pointer</button>
     <button class="tab" onclick="showPage('conges',this)">🏖 Congés</button>
     <button class="tab" onclick="showPage('feuille',this)">✍ Feuille d'heures</button>
+    <button class="tab" onclick="showPage('hygiene',this)">🧼 Hygiène</button>
     <button class="tab" id="tabDashboard" style="display:none" onclick="showPage('dashboard',this)">📊 Dashboard</button>
     <button class="tab" id="tabRecap" style="display:none" onclick="showPage('recap',this)">📅 Récap</button>
     <button class="tab" id="tabFeuilles" style="display:none" onclick="showPage('feuilles',this)">🖊 Feuilles signées</button>
@@ -325,6 +344,55 @@
   <div class="admin-card" style="margin-top:1.2rem">
     <h3>📋 Congés par salarié</h3>
     <div id="congesParSalarie"></div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE HYGIÈNE (accessible à tous les salariés) ══════════ -->
+<div class="page" id="page-hygiene">
+  <div class="dash-header"><div class="dash-title">🧼 Hygiène</div></div>
+
+  <div id="hygieneAdminZone" style="display:none">
+    <div class="admin-grid" style="margin-bottom:1.2rem">
+      <div class="admin-card">
+        <h3>🏢 Établissements</h3>
+        <div id="hygieneEtabAdminList" style="margin-bottom:.8rem"></div>
+        <div style="display:flex;gap:.4rem">
+          <input type="text" id="newEtabName" placeholder="Nom du nouvel établissement" class="sel" style="flex:1"/>
+          <button class="btn-sm btn-navy" onclick="addEtablissement()">➕ Ajouter</button>
+        </div>
+      </div>
+      <div class="admin-card">
+        <h3>📧 Récap hebdomadaire</h3>
+        <p style="font-size:.8rem;color:var(--gray);margin-bottom:.8rem;line-height:1.5">Envoie au gérant un résumé par email des relevés de température et des photos de traçabilité de la semaine en cours (lundi à dimanche).</p>
+        <button class="btn-sm btn-green" onclick="sendHygieneRecap()">✉ Envoyer le récap de la semaine</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="hygieneEtabFilter" style="display:flex;gap:.4rem;margin-bottom:1rem;flex-wrap:wrap"></div>
+
+  <div style="display:flex;gap:.4rem;margin-bottom:1.2rem">
+    <button class="subtab hygiene-subtab-btn active" onclick="showHygieneSub('temp',this)">🌡 Températures</button>
+    <button class="subtab hygiene-subtab-btn" onclick="showHygieneSub('traca',this)">📋 Traçabilité</button>
+  </div>
+
+  <div id="hygiene-temp" class="hygiene-sub">
+    <div id="tempContent"></div>
+  </div>
+
+  <div id="hygiene-traca" class="hygiene-sub" style="display:none">
+    <div class="admin-card" style="margin-bottom:1.2rem">
+      <h3>➕ Ajouter une photo de traçabilité</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.8rem">
+        <div class="form-row"><label>Établissement</label><select id="trEtab"></select></div>
+        <div class="form-row"><label>Salarié</label><select id="trEmp"></select></div>
+        <div class="form-row"><label>Code PIN</label><input type="password" id="trPin" maxlength="4" placeholder="••••"/></div>
+        <div class="form-row"><label>Photo</label><input type="file" accept="image/*" capture="environment" id="trPhoto"/></div>
+      </div>
+      <div class="form-row" style="margin-top:.4rem"><label>Commentaire (optionnel)</label><input type="text" id="trComment" placeholder="Ex : étiquetage DLC pain de mie"/></div>
+      <button class="btn-add" style="max-width:260px" onclick="addTracabilite()">✅ Enregistrer</button>
+    </div>
+    <div id="tracaContent"></div>
   </div>
 </div>
 
@@ -552,6 +620,19 @@ let signatures = [];  // {id, empId, month:'YYYY-MM', signedAt, signature(dataUR
 let congesMonthDate = new Date();
 let congesSiteFilter = 'all'; // 'all' | 'Saint Ouen des Toits' | 'Chailland'
 
+// ── Hygiène : établissements, appareils de froid, relevés de température, traçabilité ──
+const defaultEtablissements = [
+  {id:1, name:'Saint Ouen des Toits'},
+  {id:2, name:'Chailland'},
+];
+let etablissements = [];  // {id, name}
+let appareils = [];       // {id, etabId, name, type:'frigo'|'congelateur', photo(dataURL|null)}
+let temperatures = [];    // {id, appareilId, etabId, date, heure, valeur, empId}
+let tracabilites = [];    // {id, etabId, empId, date, heure, photo(dataURL), commentaire}
+let hygieneEtabFilter = 'all';
+let hygieneSubTab = 'temp';
+let tracaViewMode = 'jour'; // 'jour' | 'semaine'
+
 let adminUnlocked = false;
 
 let selEmp=null, pinBuf='';
@@ -563,6 +644,10 @@ const sessionsRef  = db.ref('sessions');
 const settingsRef  = db.ref('settings');
 const congesRef    = db.ref('conges');
 const signaturesRef = db.ref('signatures');
+const etablissementsRef = db.ref('etablissements');
+const appareilsRef = db.ref('appareils');
+const temperaturesRef = db.ref('temperatures');
+const tracabilitesRef = db.ref('tracabilites');
 
 function saveEmployees(){ employeesRef.set(employees); }
 function saveSignatures(){ signaturesRef.set(signatures); }
@@ -570,6 +655,10 @@ function savePointages(){ pointagesRef.set(pointages); }
 function saveSessions(){ sessionsRef.set(sessions); }
 function saveSettingsData(){ settingsRef.set(settings); }
 function saveConges(){ congesRef.set(conges); }
+function saveEtablissements(){ etablissementsRef.set(etablissements); }
+function saveAppareils(){ appareilsRef.set(appareils); }
+function saveTemperatures(){ temperaturesRef.set(temperatures); }
+function saveTracabilites(){ tracabilitesRef.set(tracabilites); }
 
 // On attend d'être authentifié (connexion anonyme) avant de lire/écrire la base
 firebase.auth().onAuthStateChanged(user=>{
@@ -580,6 +669,10 @@ firebase.auth().onAuthStateChanged(user=>{
   pointagesRef.once('value').then(snap=>{ if(!snap.exists()) pointagesRef.set(genDemo()); });
   settingsRef.once('value').then(snap=>{ if(!snap.exists()) settingsRef.set(settings); });
   congesRef.once('value').then(snap=>{ if(!snap.exists()) congesRef.set([]); });
+  etablissementsRef.once('value').then(snap=>{ if(!snap.exists()) etablissementsRef.set(defaultEtablissements); });
+  appareilsRef.once('value').then(snap=>{ if(!snap.exists()) appareilsRef.set([]); });
+  temperaturesRef.once('value').then(snap=>{ if(!snap.exists()) temperaturesRef.set([]); });
+  tracabilitesRef.once('value').then(snap=>{ if(!snap.exists()) tracabilitesRef.set([]); });
 
   // Écoute en temps réel : dès qu'un appareil modifie une donnée, tous les autres se mettent à jour automatiquement
   employeesRef.on('value', snap=>{
@@ -589,6 +682,7 @@ firebase.auth().onAuthStateChanged(user=>{
     if(document.getElementById('page-dashboard').classList.contains('active')) renderDash();
     if(document.getElementById('page-conges').classList.contains('active')){ populateCongesForm(); renderCongesCalendar(); }
     if(document.getElementById('page-valid-conges').classList.contains('active')) renderPendingConges();
+    if(document.getElementById('page-hygiene').classList.contains('active')){ populateHygieneForms(); renderHygiene(); }
   });
   pointagesRef.on('value', snap=>{
     pointages = snap.val() ? Object.values(snap.val()) : [];
@@ -615,6 +709,22 @@ firebase.auth().onAuthStateChanged(user=>{
   signaturesRef.on('value', snap=>{
     signatures = snap.val() ? Object.values(snap.val()) : [];
     if(document.getElementById('page-feuilles').classList.contains('active')) renderFeuillesSignees();
+  });
+  etablissementsRef.on('value', snap=>{
+    etablissements = snap.val() ? Object.values(snap.val()) : [];
+    if(document.getElementById('page-hygiene').classList.contains('active')){ populateHygieneForms(); renderHygiene(); }
+  });
+  appareilsRef.on('value', snap=>{
+    appareils = snap.val() ? Object.values(snap.val()) : [];
+    if(document.getElementById('page-hygiene').classList.contains('active')) renderHygiene();
+  });
+  temperaturesRef.on('value', snap=>{
+    temperatures = snap.val() ? Object.values(snap.val()) : [];
+    if(document.getElementById('page-hygiene').classList.contains('active')) renderHygiene();
+  });
+  tracabilitesRef.on('value', snap=>{
+    tracabilites = snap.val() ? Object.values(snap.val()) : [];
+    if(document.getElementById('page-hygiene').classList.contains('active')) renderHygiene();
   });
 });
 
@@ -686,6 +796,7 @@ function showPage(id, btn){
   if(id==='valid-conges') renderPendingConges();
   if(id==='feuille') initFeuillePage();
   if(id==='feuilles') renderFeuillesSignees();
+  if(id==='hygiene'){ populateHygieneForms(); renderHygiene(); }
 }
 
 // ══════════════════════════════════════════
@@ -705,6 +816,7 @@ function requestAdminAccess(){
     document.getElementById('tabLock').style.display='none';
     document.getElementById('tabUnlock').style.display='inline-block';
     toast('🔓 Accès gérant débloqué','t-success');
+    if(document.getElementById('page-hygiene').classList.contains('active')) renderHygiene();
     showPage('dashboard', document.getElementById('tabDashboard'));
   } else {
     toast('❌ Code incorrect','t-error');
@@ -722,6 +834,7 @@ function lockAdminAccess(){
   document.getElementById('tabUnlock').style.display='none';
   document.getElementById('tabLock').style.display='inline-block';
   toast('🔒 Accès gérant verrouillé','t-info');
+  if(document.getElementById('page-hygiene').classList.contains('active')) renderHygiene();
   showPage('pointer', document.getElementById('tabPointer'));
 }
 
@@ -2347,6 +2460,450 @@ function saveSettings(){
   else { toast('❌ Code gérant : 4 chiffres exactement','t-error'); return; }
   saveSettingsData();
   toast('✅ Paramètres enregistrés','t-success');
+}
+
+// ══════════════════════════════════════════
+//  HYGIÈNE — ÉTABLISSEMENTS, TEMPÉRATURES, TRAÇABILITÉ
+// ══════════════════════════════════════════
+
+// Redimensionne/compresse une photo avant stockage (les images sont conservées en base64 dans Firebase)
+function readAndCompressImage(file, maxW, quality, cb){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const scale=Math.min(1, maxW/img.width);
+      const w=Math.round(img.width*scale), h=Math.round(img.height*scale);
+      const canvas=document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      cb(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror=()=>{ toast('❌ Image illisible','t-error'); };
+    img.src=e.target.result;
+  };
+  reader.onerror=()=>{ toast('❌ Erreur de lecture du fichier','t-error'); };
+  reader.readAsDataURL(file);
+}
+
+// Renvoie 'ok' ou 'alert' selon les normes HACCP standard (frigo 0-4°C, congélateur ≤ -18°C)
+function tempStatus(type, valeur){
+  if(type==='congelateur') return valeur<=-18 ? 'ok' : 'alert';
+  return (valeur>=0 && valeur<=4) ? 'ok' : 'alert';
+}
+
+// Remplit les menus déroulants salarié / établissement des formulaires hygiène
+function populateHygieneForms(){
+  ['trEmp'].forEach(id=>{
+    const sel=document.getElementById(id);
+    if(!sel) return;
+    const prev=sel.value;
+    sel.innerHTML='';
+    employees.forEach(e=>sel.appendChild(new Option(e.name,e.id)));
+    if(prev) sel.value=prev;
+  });
+  ['trEtab'].forEach(id=>{
+    const sel=document.getElementById(id);
+    if(!sel) return;
+    const prev=sel.value;
+    sel.innerHTML='';
+    etablissements.forEach(e=>sel.appendChild(new Option(e.name,e.id)));
+    if(prev) sel.value=prev;
+  });
+}
+
+function showHygieneSub(tab, btn){
+  hygieneSubTab=tab;
+  document.querySelectorAll('.hygiene-subtab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  document.getElementById('hygiene-temp').style.display = tab==='temp' ? 'block' : 'none';
+  document.getElementById('hygiene-traca').style.display = tab==='traca' ? 'block' : 'none';
+}
+
+function setHygieneEtabFilter(v){
+  hygieneEtabFilter=v;
+  renderHygiene();
+}
+
+// ── Établissements (gestion réservée au gérant) ──
+function addEtablissement(){
+  if(!adminUnlocked) return;
+  const input=document.getElementById('newEtabName');
+  const name=input.value.trim();
+  if(!name){ toast("❌ Indiquez un nom d'établissement",'t-error'); return; }
+  etablissements.push({id:Date.now(), name});
+  saveEtablissements();
+  input.value='';
+  toast('✅ Établissement ajouté','t-success');
+}
+
+function deleteEtablissement(id){
+  if(!adminUnlocked) return;
+  if(!confirm("Supprimer cet établissement ? (les appareils et relevés associés resteront masqués)")) return;
+  etablissements=etablissements.filter(e=>e.id!==id);
+  saveEtablissements();
+  if(String(hygieneEtabFilter)===String(id)) hygieneEtabFilter='all';
+  renderHygiene();
+}
+
+// ── Appareils de froid (gestion réservée au gérant) ──
+function addAppareil(etabId){
+  if(!adminUnlocked) return;
+  const nameInput=document.getElementById('newAppName_'+etabId);
+  const typeInput=document.getElementById('newAppType_'+etabId);
+  const fileInput=document.getElementById('newAppPhoto_'+etabId);
+  const name=nameInput.value.trim();
+  const type=typeInput.value;
+  if(!name){ toast('❌ Indiquez un nom (ex : Frigo 1)','t-error'); return; }
+
+  const finish=(photo)=>{
+    appareils.push({id:Date.now(), etabId, name, type, photo: photo||null});
+    saveAppareils();
+    nameInput.value='';
+    if(fileInput) fileInput.value='';
+    toast('✅ Appareil ajouté','t-success');
+    renderHygiene();
+  };
+  if(fileInput && fileInput.files && fileInput.files[0]){
+    readAndCompressImage(fileInput.files[0], 640, 0.6, finish);
+  } else finish(null);
+}
+
+function deleteAppareil(id){
+  if(!adminUnlocked) return;
+  if(!confirm('Supprimer cet appareil et tout son historique de températures ?')) return;
+  appareils=appareils.filter(a=>a.id!==id);
+  temperatures=temperatures.filter(t=>t.appareilId!==id);
+  saveAppareils(); saveTemperatures();
+  renderHygiene();
+}
+
+function changeAppareilPhoto(id, input){
+  if(!adminUnlocked || !input.files || !input.files[0]) return;
+  readAndCompressImage(input.files[0], 640, 0.6, photo=>{
+    const a=appareils.find(x=>x.id===id);
+    if(!a) return;
+    a.photo=photo;
+    saveAppareils();
+    toast('✅ Photo mise à jour','t-success');
+  });
+}
+
+// ── Relevés de température (accessible à tous les salariés, via code PIN) ──
+function addTemperature(appareilId){
+  const app=appareils.find(a=>a.id===appareilId);
+  if(!app) return;
+  const valInput=document.getElementById('temp_val_'+appareilId);
+  const empSel=document.getElementById('temp_emp_'+appareilId);
+  const pinInput=document.getElementById('temp_pin_'+appareilId);
+  const valeur=parseFloat((valInput.value||'').replace(',','.'));
+  const empId=+empSel.value;
+  const pin=pinInput.value.trim();
+  const emp=employees.find(e=>e.id===empId);
+
+  if(isNaN(valeur)){ toast('❌ Indiquez une température','t-error'); return; }
+  if(!emp){ toast('❌ Sélectionnez un salarié','t-error'); return; }
+  if(!adminUnlocked && pin!==emp.pin){ toast('❌ Code PIN incorrect','t-error'); return; }
+
+  const now=new Date();
+  temperatures.push({
+    id:Date.now(), appareilId, etabId:app.etabId,
+    date: now.toISOString().split('T')[0],
+    heure: now.toTimeString().slice(0,5),
+    valeur, empId
+  });
+  saveTemperatures();
+  valInput.value=''; pinInput.value='';
+  const st=tempStatus(app.type, valeur);
+  toast(st==='ok' ? `✅ Température enregistrée (${valeur}°C)` : `⚠️ Température hors norme enregistrée (${valeur}°C)`, st==='ok'?'t-success':'t-error');
+}
+
+function deleteTemperature(id){
+  if(!adminUnlocked) return;
+  temperatures=temperatures.filter(t=>t.id!==id);
+  saveTemperatures();
+  renderHygiene();
+}
+
+// ── Traçabilité (photos quotidiennes, accessible à tous les salariés, via code PIN) ──
+function addTracabilite(){
+  const etabId=+document.getElementById('trEtab').value;
+  const empId=+document.getElementById('trEmp').value;
+  const pin=document.getElementById('trPin').value.trim();
+  const fileInput=document.getElementById('trPhoto');
+  const comment=document.getElementById('trComment').value.trim();
+  const emp=employees.find(e=>e.id===empId);
+  const etab=etablissements.find(e=>e.id===etabId);
+
+  if(!etab){ toast('❌ Sélectionnez un établissement','t-error'); return; }
+  if(!emp){ toast('❌ Sélectionnez un salarié','t-error'); return; }
+  if(!adminUnlocked && pin!==emp.pin){ toast('❌ Code PIN incorrect','t-error'); return; }
+  if(!fileInput.files || !fileInput.files[0]){ toast('❌ Ajoutez une photo','t-error'); return; }
+
+  toast('📷 Enregistrement en cours...','t-info');
+  readAndCompressImage(fileInput.files[0], 900, 0.65, photo=>{
+    const now=new Date();
+    tracabilites.push({
+      id:Date.now(), etabId, empId,
+      date: now.toISOString().split('T')[0],
+      heure: now.toTimeString().slice(0,5),
+      photo, commentaire: comment
+    });
+    saveTracabilites();
+    document.getElementById('trPin').value='';
+    document.getElementById('trComment').value='';
+    fileInput.value='';
+    toast('✅ Photo enregistrée','t-success');
+  });
+}
+
+function deleteTracabilite(id){
+  if(!adminUnlocked) return;
+  if(!confirm('Supprimer cette entrée de traçabilité ?')) return;
+  tracabilites=tracabilites.filter(t=>t.id!==id);
+  saveTracabilites();
+  renderHygiene();
+}
+
+function setTracaView(mode){
+  tracaViewMode=mode;
+  renderHygiene();
+}
+
+// ── Rendu principal de la page Hygiène ──
+function renderHygiene(){
+  document.getElementById('hygieneAdminZone').style.display = adminUnlocked ? 'block' : 'none';
+  if(adminUnlocked) renderEtabAdmin();
+  renderHygieneEtabFilter();
+  renderTempSection();
+  renderTracaSection();
+}
+
+function renderEtabAdmin(){
+  const box=document.getElementById('hygieneEtabAdminList');
+  if(!box) return;
+  box.innerHTML = etablissements.map(e=>`
+    <div class="emp-list-item">
+      <div class="emp-info">🏢 ${escHtml(e.name)}</div>
+      <button class="btn-del" onclick="deleteEtablissement(${e.id})">✕ Supprimer</button>
+    </div>`).join('') || '<p style="font-size:.78rem;color:var(--gray)">Aucun établissement pour le moment.</p>';
+}
+
+function renderHygieneEtabFilter(){
+  const box=document.getElementById('hygieneEtabFilter');
+  if(!box) return;
+  const chips=[{v:'all',l:'🏢 Tous les établissements'}, ...etablissements.map(e=>({v:String(e.id), l:e.name}))];
+  box.innerHTML=chips.map(c=>
+    `<button class="site-filter-btn ${String(hygieneEtabFilter)===c.v?'active':''}" onclick="setHygieneEtabFilter('${c.v}')">${c.l}</button>`
+  ).join('');
+}
+
+function renderTempSection(){
+  const box=document.getElementById('tempContent');
+  if(!box) return;
+  const visibleEtabs = hygieneEtabFilter==='all' ? etablissements : etablissements.filter(e=>String(e.id)===String(hygieneEtabFilter));
+
+  if(!visibleEtabs.length){
+    box.innerHTML=`<p style="color:var(--gray);font-size:.85rem">Aucun établissement enregistré. ${adminUnlocked?'Ajoutez-en un ci-dessus.':"Demandez au gérant d'en ajouter un."}</p>`;
+    return;
+  }
+
+  const empOptions = employees.map(e=>`<option value="${e.id}">${escHtml(e.name)}</option>`).join('');
+
+  box.innerHTML = visibleEtabs.map(etab=>{
+    const apps = appareils.filter(a=>a.etabId===etab.id);
+
+    const cardsHtml = apps.map(app=>{
+      const readings = temperatures.filter(t=>t.appareilId===app.id).sort((a,b)=>(b.date+b.heure).localeCompare(a.date+a.heure));
+      const last = readings[0];
+      const lastEmp = last ? employees.find(e=>e.id===last.empId) : null;
+      let statusHtml='<span style="font-size:.72rem;color:var(--gray)">Aucun relevé</span>';
+      if(last){
+        const st=tempStatus(app.type,last.valeur);
+        statusHtml=`<span class="temp-badge ${st==='ok'?'temp-ok':'temp-alert'}">${st==='ok'?'✅':'⚠️'} ${last.valeur}°C</span>`;
+      }
+      const photoHtml = app.photo
+        ? `<img src="${app.photo}" class="appareil-photo"/>`
+        : `<div class="appareil-photo appareil-photo-empty">${app.type==='congelateur'?'🧊':'🧯'}</div>`;
+      const adminBtns = adminUnlocked ? `
+        <div style="display:flex;gap:.35rem;margin-top:.5rem">
+          <label class="btn-edit" style="cursor:pointer">📷 Photo<input type="file" accept="image/*" capture="environment" style="display:none" onchange="changeAppareilPhoto(${app.id}, this)"></label>
+          <button class="btn-del" onclick="deleteAppareil(${app.id})">✕</button>
+        </div>` : '';
+
+      return `<div class="appareil-card">
+        ${photoHtml}
+        <div class="appareil-name">${app.type==='congelateur'?'🧊':'🧯'} ${escHtml(app.name)}</div>
+        <div style="margin:.3rem 0">${statusHtml}</div>
+        ${last ? `<div style="font-size:.68rem;color:var(--gray)">${last.date} à ${last.heure} — ${lastEmp?escHtml(lastEmp.name):'?'}</div>` : ''}
+        <details style="margin-top:.5rem">
+          <summary style="cursor:pointer;font-size:.74rem;color:var(--navy);font-weight:700">➕ Relever une température</summary>
+          <div style="margin-top:.5rem;display:flex;flex-direction:column;gap:.4rem">
+            <select id="temp_emp_${app.id}" class="sel" style="width:100%">${empOptions}</select>
+            <input type="password" id="temp_pin_${app.id}" maxlength="4" placeholder="Code PIN" class="sel" style="width:100%"/>
+            <input type="number" step="0.1" id="temp_val_${app.id}" placeholder="Température °C" class="sel" style="width:100%"/>
+            <button class="btn-sm btn-navy" onclick="addTemperature(${app.id})">✅ Enregistrer</button>
+          </div>
+        </details>
+        ${adminBtns}
+      </div>`;
+    }).join('');
+
+    const addFormHtml = adminUnlocked ? `
+      <div class="appareil-card appareil-add-card">
+        <div class="appareil-name" style="margin-bottom:.5rem">➕ Nouvel appareil</div>
+        <input type="text" id="newAppName_${etab.id}" placeholder="Nom (ex : Frigo 1)" class="sel" style="width:100%;margin-bottom:.4rem"/>
+        <select id="newAppType_${etab.id}" class="sel" style="width:100%;margin-bottom:.4rem">
+          <option value="frigo">🧯 Frigo</option>
+          <option value="congelateur">🧊 Congélateur</option>
+        </select>
+        <input type="file" accept="image/*" capture="environment" id="newAppPhoto_${etab.id}" style="width:100%;margin-bottom:.5rem;font-size:.7rem"/>
+        <button class="btn-add" onclick="addAppareil(${etab.id})">Ajouter</button>
+      </div>` : '';
+
+    const readingsHistory = temperatures.filter(t=>t.etabId===etab.id).sort((a,b)=>(b.date+b.heure).localeCompare(a.date+a.heure)).slice(0,25);
+    const histRows = readingsHistory.map(t=>{
+      const app=appareils.find(a=>a.id===t.appareilId);
+      const emp=employees.find(e=>e.id===t.empId);
+      const st=tempStatus(app?app.type:'frigo', t.valeur);
+      const delBtn=adminUnlocked?`<button class="btn-del" onclick="deleteTemperature(${t.id})">✕</button>`:'';
+      return `<tr><td>${t.date}</td><td>${t.heure}</td><td>${app?escHtml(app.name):'?'}</td><td><span class="badge ${st==='ok'?'b-green':'b-red'}">${t.valeur}°C</span></td><td>${emp?escHtml(emp.name):'?'}</td><td>${delBtn}</td></tr>`;
+    }).join('');
+
+    return `<div class="admin-card" style="margin-bottom:1.2rem">
+      <h3>🏢 ${escHtml(etab.name)}</h3>
+      <div class="appareil-grid">${cardsHtml}${addFormHtml}</div>
+      ${apps.length ? `<div class="table-wrap" style="margin-top:1rem">
+        <table><thead><tr><th>Date</th><th>Heure</th><th>Appareil</th><th>Valeur</th><th>Salarié</th><th></th></tr></thead>
+        <tbody>${histRows || '<tr><td colspan="6" style="text-align:center;color:var(--gray)">Aucun relevé</td></tr>'}</tbody></table>
+      </div>` : (apps.length===0 && !adminUnlocked ? '<p style="font-size:.8rem;color:var(--gray);margin-top:.6rem">Aucun frigo/congélateur enregistré sur cet établissement.</p>' : '')}
+    </div>`;
+  }).join('');
+}
+
+function renderTracaSection(){
+  const box=document.getElementById('tracaContent');
+  if(!box) return;
+
+  let filtered = hygieneEtabFilter==='all' ? tracabilites.slice() : tracabilites.filter(t=>String(t.etabId)===String(hygieneEtabFilter));
+  filtered.sort((a,b)=>(b.date+b.heure).localeCompare(a.date+a.heure));
+
+  const toggleHtml = `<div style="display:flex;gap:.5rem;margin-bottom:1rem">
+    <button class="btn-sm ${tracaViewMode==='jour'?'btn-navy':''}" onclick="setTracaView('jour')">📅 Par jour</button>
+    <button class="btn-sm ${tracaViewMode==='semaine'?'btn-navy':''}" onclick="setTracaView('semaine')">🗓 Par semaine</button>
+  </div>`;
+
+  if(!filtered.length){
+    box.innerHTML = toggleHtml + '<p style="color:var(--gray);font-size:.85rem">Aucune photo de traçabilité enregistrée.</p>';
+    return;
+  }
+
+  const groups={};
+  filtered.forEach(t=>{
+    const key = tracaViewMode==='jour' ? t.date : `${new Date(t.date+'T12:00:00').getFullYear()}-S${weekNum(t.date)}`;
+    if(!groups[key]) groups[key]=[];
+    groups[key].push(t);
+  });
+
+  const groupHtml = Object.entries(groups).map(([key,items])=>{
+    let label;
+    if(tracaViewMode==='jour'){
+      label = new Date(key+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+      label = label.charAt(0).toUpperCase()+label.slice(1);
+    } else {
+      label = `Semaine ${key.split('-S')[1]} — ${key.split('-S')[0]}`;
+    }
+    const cards=items.map(t=>{
+      const emp=employees.find(e=>e.id===t.empId);
+      const etab=etablissements.find(e=>e.id===t.etabId);
+      const delBtn=adminUnlocked?`<button class="btn-del" style="position:absolute;top:.4rem;right:.4rem" onclick="deleteTracabilite(${t.id})">✕</button>`:'';
+      return `<div class="traca-card">
+        ${delBtn}
+        <img src="${t.photo}" class="traca-photo" onclick="window.open(this.src)"/>
+        <div class="traca-meta">
+          <b>${emp?escHtml(emp.name):'?'}</b> · ${etab?escHtml(etab.name):'?'}<br>
+          <span style="color:var(--gray)">${t.heure}</span>
+          ${t.commentaire?`<div style="margin-top:.2rem;font-style:italic">${escHtml(t.commentaire)}</div>`:''}
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="admin-card" style="margin-bottom:1rem">
+      <h3>${label} <span style="color:var(--gray);font-weight:400;font-size:.75rem">(${items.length} photo${items.length>1?'s':''})</span></h3>
+      <div class="traca-grid">${cards}</div>
+    </div>`;
+  }).join('');
+
+  box.innerHTML = toggleHtml + groupHtml;
+}
+
+// ── Email récapitulatif hebdomadaire au gérant (semaine en cours, lundi à dimanche) ──
+function currentWeekRange(){
+  const now=new Date();
+  const dayIdx=(now.getDay()+6)%7; // lundi=0
+  const monday=new Date(now); monday.setDate(now.getDate()-dayIdx); monday.setHours(0,0,0,0);
+  const sunday=new Date(monday); sunday.setDate(monday.getDate()+6);
+  const fmt=d=>d.toISOString().split('T')[0];
+  return {start:fmt(monday), end:fmt(sunday)};
+}
+
+function sendHygieneRecap(){
+  const {start,end} = currentWeekRange();
+  const tempsWeek = temperatures.filter(t=>t.date>=start && t.date<=end);
+  const tracaWeek = tracabilites.filter(t=>t.date>=start && t.date<=end);
+  const labelPeriode = `du ${new Date(start+'T12:00:00').toLocaleDateString('fr-FR')} au ${new Date(end+'T12:00:00').toLocaleDateString('fr-FR')}`;
+
+  let body = `Récapitulatif hygiène — semaine ${labelPeriode}\nBoulangerie des Forges\n\n`;
+
+  body += `🌡 TEMPÉRATURES (${tempsWeek.length} relevé${tempsWeek.length>1?'s':''})\n`;
+  etablissements.forEach(etab=>{
+    const list=tempsWeek.filter(t=>t.etabId===etab.id).sort((a,b)=>(a.date+a.heure).localeCompare(b.date+b.heure));
+    if(!list.length) return;
+    body += `\n${etab.name} :\n`;
+    list.forEach(t=>{
+      const app=appareils.find(a=>a.id===t.appareilId);
+      const emp=employees.find(e=>e.id===t.empId);
+      const st=tempStatus(app?app.type:'frigo', t.valeur);
+      body += `  - ${t.date} ${t.heure} | ${app?app.name:'?'} | ${t.valeur}°C ${st==='ok'?'(conforme)':'(HORS NORME)'} | relevé par ${emp?emp.name:'?'}\n`;
+    });
+  });
+  const anomalies = tempsWeek.filter(t=>{
+    const app=appareils.find(a=>a.id===t.appareilId);
+    return tempStatus(app?app.type:'frigo', t.valeur)==='alert';
+  });
+  body += `\n⚠️ Anomalies détectées cette semaine : ${anomalies.length}\n`;
+
+  body += `\n📋 TRAÇABILITÉ (${tracaWeek.length} photo${tracaWeek.length>1?'s':''})\n`;
+  etablissements.forEach(etab=>{
+    const list=tracaWeek.filter(t=>t.etabId===etab.id).sort((a,b)=>(a.date+a.heure).localeCompare(b.date+b.heure));
+    if(!list.length) return;
+    body += `\n${etab.name} :\n`;
+    list.forEach(t=>{
+      const emp=employees.find(e=>e.id===t.empId);
+      body += `  - ${t.date} ${t.heure} | ${emp?emp.name:'?'}${t.commentaire?` | ${t.commentaire}`:''}\n`;
+    });
+  });
+
+  body += `\n(Les photos sont consultables directement dans l'application, onglet Hygiène → Traçabilité.)\n`;
+
+  if(!tempsWeek.length && !tracaWeek.length){
+    toast('ℹ️ Aucune donnée hygiène cette semaine','t-info');
+    return;
+  }
+
+  const subject = `Récap hygiène — semaine ${labelPeriode} — Boulangerie des Forges`;
+  const email = settings.email || 'gerant@boulangerie-desforges.fr';
+
+  toast('📧 Envoi en cours...','t-info');
+  emailjs.send('service_i0lfwfg','template_s58kq34',{
+    to_email: email,
+    subject: subject,
+    message: body
+  }).then(()=>{
+    toast(`✅ Récap hygiène envoyé à ${email}`,'t-success');
+  }).catch(err=>{
+    console.error('Erreur EmailJS :', err);
+    toast("❌ Échec de l'envoi — vérifie la console",'t-error');
+  });
 }
 </script>
 </body>
