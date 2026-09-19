@@ -482,7 +482,8 @@
 <div class="modal-overlay" id="modalOverlay" style="display:none">
   <div class="modal-box">
     <div class="modal-title" id="modalTitle">Modifier un pointage</div>
-    <div class="form-row"><label>Salarié</label><select id="mEmp" onchange="updateModalPauseVisibility()"></select></div>
+    <div id="mHint" style="font-size:.72rem;color:var(--gray);margin-bottom:.7rem;line-height:1.4">ℹ️ Tu n'es pas obligé de tout remplir : tu peux enregistrer juste l'arrivée, ou juste une pause. La présence restera « en cours » jusqu'à ce que tu ajoutes le départ.</div>
+    <div class="form-row"><label>Salarié</label><select id="mEmp" onchange="updateModalPauseVisibility();handleModalEmpChange()"></select></div>
     <div class="form-row"><label>Date</label><input type="date" id="mDate"/></div>
     <div class="form-row"><label>Heure d'arrivée</label><input type="time" id="mArrivee"/></div>
     <div id="mPauseRow" style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
@@ -521,6 +522,7 @@
     <div class="dash-title">📅 Récapitulatif mensuel</div>
     <div class="dash-controls">
       <select class="sel" id="recapMonth" onchange="renderRecap()"></select>
+      <button class="btn-sm btn-green" onclick="exportRecapExcel()">📊 Excel complet (.xlsx)</button>
       <button class="btn-sm btn-navy" onclick="exportRecapCSV()">⬇ CSV détaillé (jour par jour)</button>
       <button class="btn-sm btn-green" onclick="sendEmail()">✉ Email gérant</button>
       <button class="btn-sm btn-navy" onclick="window.print()">🖨 Imprimer</button>
@@ -570,6 +572,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 emailjs.init({ publicKey: "Hx45flDjyjWz_haqo" });
 </script>
@@ -1063,6 +1066,7 @@ function openEditModal(pointageId){
   if(!p) return;
   modalMode='edit-pointage'; modalTarget=pointageId;
   document.getElementById('modalTitle').textContent='✏️ Modifier un pointage';
+  document.getElementById('mHint').style.display='none';
   populateModalEmpSelect(p.empId);
   document.getElementById('mDate').value=p.date;
   document.getElementById('mArrivee').value=p.arrivee;
@@ -1074,9 +1078,13 @@ function openEditModal(pointageId){
   updateModalPauseVisibility();
 }
 
+// Le bouton "Pointage manuel" : sert aussi bien à démarrer une présence (juste l'arrivée),
+// qu'à compléter une pause ou clôturer une journée déjà en cours pour ce salarié — sans
+// obliger à ressaisir toute la journée. Si le salarié sélectionné a déjà une présence en
+// cours, ses horaires connus sont préremplis automatiquement (voir handleModalEmpChange).
 function openAddModal(){
   modalMode='add-pointage'; modalTarget=null;
-  document.getElementById('modalTitle').textContent='➕ Ajouter un pointage manuel';
+  document.getElementById('mHint').style.display='block';
   populateModalEmpSelect();
   document.getElementById('mDate').value=new Date().toISOString().split('T')[0];
   document.getElementById('mArrivee').value='';
@@ -1086,6 +1094,34 @@ function openAddModal(){
   document.getElementById('mDeleteBtn').style.display='none';
   document.getElementById('modalOverlay').style.display='flex';
   updateModalPauseVisibility();
+  handleModalEmpChange();
+}
+
+// Appelée quand on change le salarié dans la modale "Pointage manuel" : si ce salarié a
+// déjà une présence en cours (arrivée déjà pointée au kiosque, pause en cours...), on
+// préremplit ce qui est déjà connu pour qu'il suffise d'ajouter la fin de pause ou le départ.
+function handleModalEmpChange(){
+  if(modalMode!=='add-pointage') return;
+  const empId=+document.getElementById('mEmp').value;
+  const sess=sessions[empId];
+  if(sess){
+    document.getElementById('mDate').value=sess.date;
+    document.getElementById('mArrivee').value=sess.arrivee;
+    document.getElementById('mPauseDebut').value=sess.pauseDebut||'';
+    document.getElementById('mPauseFin').value=sess.pauseFin||'';
+    document.getElementById('mDepart').value='';
+    document.getElementById('modalTitle').textContent='✏️ Compléter la présence en cours';
+    document.getElementById('mDeleteBtn').style.display='block';
+    modalTarget=empId; // pour permettre la suppression de la présence en cours depuis cette modale
+  } else {
+    document.getElementById('mArrivee').value='';
+    document.getElementById('mPauseDebut').value='';
+    document.getElementById('mPauseFin').value='';
+    document.getElementById('mDepart').value='';
+    document.getElementById('modalTitle').textContent='➕ Ajouter un pointage manuel';
+    document.getElementById('mDeleteBtn').style.display='none';
+    modalTarget=null;
+  }
 }
 
 function openSessionEditModal(empId){
@@ -1093,6 +1129,7 @@ function openSessionEditModal(empId){
   if(!sess) return;
   modalMode='edit-session'; modalTarget=empId;
   document.getElementById('modalTitle').textContent='✏️ Corriger / clôturer une présence';
+  document.getElementById('mHint').style.display='block';
   populateModalEmpSelect(empId);
   document.getElementById('mEmp').disabled=true;
   document.getElementById('mDate').value=sess.date;
@@ -1122,9 +1159,16 @@ function saveModal(){
   const depart=document.getElementById('mDepart').value;
 
   if(!date||!arrivee){ toast("❌ Date et heure d'arrivée requises",'t-error'); return; }
-  if((pauseDebut && !pauseFin) || (!pauseDebut && pauseFin)){ toast('❌ Renseigne le début ET la fin de pause (ou aucun des deux)','t-error'); return; }
+  // Une fin de pause n'a de sens que si un début de pause est renseigné. En revanche,
+  // un début de pause SEUL est valide : ça correspond à un salarié actuellement en pause
+  // (pointage partiel), sa fin de pause pourra être ajoutée plus tard.
+  if(pauseFin && !pauseDebut){ toast('❌ Renseigne un début de pause avant la fin de pause','t-error'); return; }
 
-  if(modalMode==='edit-session'){
+  // Une présence en cours pour ce salarié (déjà démarrée au kiosque, ou déjà créée via
+  // cette même modale) : on la complète/corrige plutôt que d'en créer une nouvelle.
+  const sessionACompleter=(modalMode==='edit-session' || modalMode==='add-pointage') ? sessions[empId] : null;
+
+  if(sessionACompleter){
     if(depart){
       const entry=buildPointageEntry(empId,date,arrivee,pauseDebut,pauseFin,depart,hasPause);
       pointages.push(entry);
@@ -1136,7 +1180,7 @@ function saveModal(){
       const state=(pauseDebut && pauseFin)?'in2':(pauseDebut?'pause':'in');
       sessions[empId]={date,arrivee,pauseDebut:pauseDebut||null,pauseFin:pauseFin||null,state};
       saveSessions();
-      toast('✅ Présence mise à jour','t-success');
+      toast('✅ Pointage enregistré — présence toujours en cours','t-success');
     }
   } else if(modalMode==='edit-pointage'){
     if(!depart){ toast('❌ Heure de départ requise','t-error'); return; }
@@ -1151,12 +1195,21 @@ function saveModal(){
     toast('✅ Pointage modifié','t-success');
     if(p) checkOvertimeAndAlert(p);
   } else if(modalMode==='add-pointage'){
-    if(!depart){ toast('❌ Heure de départ requise','t-error'); return; }
-    const entry=buildPointageEntry(empId,date,arrivee,pauseDebut,pauseFin,depart,hasPause);
-    pointages.push(entry);
-    savePointages();
-    toast('✅ Pointage ajouté','t-success');
-    checkOvertimeAndAlert(entry);
+    // Pas de présence en cours pour ce salarié : soit on ajoute directement une journée
+    // complète (si le départ est renseigné), soit on démarre une présence en cours avec
+    // seulement ce qui est connu (arrivée seule, ou arrivée + début de pause).
+    if(depart){
+      const entry=buildPointageEntry(empId,date,arrivee,pauseDebut,pauseFin,depart,hasPause);
+      pointages.push(entry);
+      savePointages();
+      toast('✅ Pointage ajouté','t-success');
+      checkOvertimeAndAlert(entry);
+    } else {
+      const state=(pauseDebut && pauseFin)?'in2':(pauseDebut?'pause':'in');
+      sessions[empId]={date,arrivee,pauseDebut:pauseDebut||null,pauseFin:pauseFin||null,state};
+      saveSessions();
+      toast('✅ Arrivée enregistrée — présence en cours','t-success');
+    }
   }
   closeModal();
   renderDash(); renderEmpGrid();
@@ -1164,7 +1217,7 @@ function saveModal(){
 
 function deleteModal(){
   if(!confirm('Supprimer cette entrée ?')) return;
-  if(modalMode==='edit-session'){
+  if(modalMode==='edit-session' || (modalMode==='add-pointage' && sessions[modalTarget])){
     delete sessions[modalTarget];
     saveSessions();
     toast('🗑 Présence supprimée','t-info');
@@ -1908,6 +1961,103 @@ function exportRecapCSV(){
   const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`recap_detaille_${y}-${pad(m)}.csv`});
   a.click();
   toast('✅ Récapitulatif détaillé exporté','t-success');
+}
+
+// ══════════════════════════════════════════
+//  EXPORT EXCEL (.xlsx) — un onglet par salarié, avec le mois complet
+//  jour par jour (du 1er au dernier jour du mois sélectionné dans le récap).
+// ══════════════════════════════════════════
+
+// Garantit un nom d'onglet Excel valide (31 caractères max, pas de caractères
+// interdits \ / ? * [ ] :) et unique dans le classeur (ajoute "(2)", "(3)"... si besoin).
+function sheetNameSafe(name, used){
+  let n=(name||'Salarié').replace(/[\\\/\?\*\[\]:]/g,' ').trim().substring(0,31) || 'Salarié';
+  const base=n;
+  let i=2;
+  while(used.has(n)){
+    const suffix=` (${i})`;
+    n=base.substring(0,31-suffix.length)+suffix;
+    i++;
+  }
+  used.add(n);
+  return n;
+}
+
+function exportRecapExcel(){
+  if(typeof XLSX==='undefined'){ toast('❌ Librairie Excel non chargée, vérifie ta connexion internet','t-error'); return; }
+
+  const val=document.getElementById('recapMonth').value;
+  const [y,m]=val.split('-').map(Number); // m est 1-based (01-12)
+  const daysInMonth=new Date(y,m,0).getDate();
+  const pad=n=>String(n).padStart(2,'0');
+  const moisPrefix=`${y}-${pad(m)}`;
+  const moisLabelRaw=new Date(y,m-1,1).toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+  const moisLabel=moisLabelRaw.charAt(0).toUpperCase()+moisLabelRaw.slice(1);
+
+  const empsAvecActivite=employees.filter(emp=>{
+    const aDesPointages=pointages.some(p=>p.empId===emp.id && p.date.startsWith(moisPrefix));
+    const aDesConges=conges.some(c=>c.empId===emp.id && c.status==='validee' && joursCongeDansMois(c.start,c.end,y,m)>0);
+    return aDesPointages || aDesConges;
+  });
+
+  if(!empsAvecActivite.length){ toast('❌ Aucune activité ce mois-ci à exporter','t-error'); return; }
+
+  const wb=XLSX.utils.book_new();
+  const usedNames=new Set();
+
+  empsAvecActivite.forEach(emp=>{
+    const empPointages=pointages.filter(p=>p.empId===emp.id && p.date.startsWith(moisPrefix));
+    const empConges=conges.filter(c=>c.empId===emp.id && c.status==='validee');
+
+    const rows=[];
+    rows.push([emp.name, emp.site]);
+    rows.push([`Récapitulatif — ${moisLabel}`]);
+    rows.push([]);
+    rows.push(['Date','Jour','Arrivée','Début pause','Fin pause','Départ','Pause déduite (h)','Durée nette (h)','Statut']);
+
+    let totalH=0, totalPause=0;
+    for(let d=1; d<=daysInMonth; d++){
+      const dateStr=`${y}-${pad(m)}-${pad(d)}`;
+      const dateObj=new Date(dateStr+'T12:00:00');
+      const jourLblRaw=dateObj.toLocaleDateString('fr-FR',{weekday:'long'});
+      const jourLbl=jourLblRaw.charAt(0).toUpperCase()+jourLblRaw.slice(1);
+      const weekday=dateObj.getDay();
+
+      const dayPointages=empPointages.filter(p=>p.date===dateStr);
+      const dayConge=empConges.find(c=>dateStr>=c.start && dateStr<=c.end);
+      const reposHabituel=(emp.repos||[]).includes(weekday);
+
+      if(dayPointages.length){
+        dayPointages.forEach(p=>{
+          rows.push([dateStr, jourLbl, p.arrivee||'', p.pauseDebut||'', p.pauseFin||'', p.depart||'',
+            +(p.dureePause||0).toFixed(2), +p.duree.toFixed(2), 'Travaillé']);
+          totalH+=p.duree; totalPause+=(p.dureePause||0);
+        });
+      } else if(dayConge){
+        rows.push([dateStr, jourLbl, '', '', '', '', '', '', dayConge.type]);
+      } else if(reposHabituel){
+        rows.push([dateStr, jourLbl, '', '', '', '', '', '', 'Repos habituel']);
+      } else {
+        rows.push([dateStr, jourLbl, '', '', '', '', '', '', 'Absence non justifiée']);
+      }
+    }
+
+    rows.push([]);
+    rows.push(['','','','','','TOTAL', +totalPause.toFixed(2), +totalH.toFixed(2), '']);
+
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:12},{wch:13},{wch:9},{wch:11},{wch:9},{wch:9},{wch:15},{wch:15},{wch:22}];
+    ws['!merges']=[
+      {s:{r:0,c:0},e:{r:0,c:1}},
+      {s:{r:1,c:0},e:{r:1,c:8}}
+    ];
+    ws['!autofilter']={ref:{s:{r:3,c:0},e:{r:3,c:8}}};
+
+    XLSX.utils.book_append_sheet(wb, ws, sheetNameSafe(emp.name, usedNames));
+  });
+
+  XLSX.writeFile(wb, `recap_complet_${y}-${pad(m)}.xlsx`);
+  toast('✅ Fichier Excel exporté — un onglet par salarié','t-success');
 }
 
 // ══════════════════════════════════════════
