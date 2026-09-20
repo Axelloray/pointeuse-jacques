@@ -599,6 +599,53 @@ const db = firebase.database();
 firebase.auth().signInAnonymously().catch(err=>{
   console.error('Erreur de connexion Firebase :', err);
 });
+
+// ══════════════════════════════════════════
+//  FILET DE SÉCURITÉ RECONNEXION (utile pour les tablettes qui restent allumées des
+//  heures sur la page pointeuse) : sur certaines tablettes, quand l'écran s'éteint ou
+//  que le navigateur passe en arrière-plan un moment, la connexion temps réel peut
+//  rester bloquée au réveil et ne pas se remettre à jour toute seule. On surveille donc
+//  deux choses et on recharge automatiquement la page (comme le ferait quelqu'un à la
+//  main) si besoin, pour repartir sur une connexion et des données bien fraîches :
+//  1) la connexion Firebase elle-même (nœud spécial .info/connected) : si elle reste
+//     coupée en continu plus de 20 secondes, on recharge ;
+//  2) le fait que l'onglet ait été caché/en veille (écran éteint, appli en arrière-plan)
+//     plus d'1 minute : au retour à l'écran, on recharge par précaution.
+(function(){
+  const RELOAD_SI_DECONNECTE_DEPUIS_MS = 20000; // 20s de coupure continue
+  const RELOAD_SI_CACHE_DEPUIS_MS      = 60000; // 1 min en arrière-plan/veille
+  let deconnecteDepuis = null;
+  let cacheDepuis = null;
+
+  db.ref('.info/connected').on('value', snap=>{
+    const connecte = snap.val()===true;
+    if(!connecte){
+      if(!deconnecteDepuis) deconnecteDepuis=Date.now();
+    } else {
+      deconnecteDepuis=null;
+    }
+  });
+
+  // Vérifie régulièrement si on est resté déconnecté trop longtemps
+  setInterval(()=>{
+    if(deconnecteDepuis && (Date.now()-deconnecteDepuis)>RELOAD_SI_DECONNECTE_DEPUIS_MS){
+      location.reload();
+    }
+  }, 5000);
+
+  // Quand l'onglet redevient visible après avoir été caché/en veille un moment
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='hidden'){
+      cacheDepuis=Date.now();
+    } else if(document.visibilityState==='visible'){
+      if(cacheDepuis && (Date.now()-cacheDepuis)>RELOAD_SI_CACHE_DEPUIS_MS){
+        location.reload();
+      }
+      cacheDepuis=null;
+    }
+  });
+})();
+
 </script>
 <script>
 // ══════════════════════════════════════════
